@@ -87,8 +87,13 @@ class PopupUI {
         ? `${timeSpentInSeconds.toFixed(2)} seconds`
         : `${(timeSpentInSeconds / 60).toFixed(2)} minutes`;
   
-      const visitTimeSpent = document.createElement('p');
-      visitTimeSpent.textContent = `Time spent: ${timeSpentDisplay}`;
+        const visitTimeSpent = document.createElement('p');
+        visitTimeSpent.textContent = 'Time spent: ';
+    
+        const timeSpan = document.createElement('span');
+        timeSpan.textContent = timeSpentDisplay;
+    
+        visitTimeSpent.appendChild(timeSpan);
   
       detailedItem.appendChild(visitUrl);
       detailedItem.appendChild(visitTimeSpent);
