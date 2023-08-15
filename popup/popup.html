@@ -3,16 +3,174 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Document</title>
+  <title>Watcher</title>
+  <style>
+  /* Styly pro popup.html */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+  margin: 0;
+  padding: 0;
+}
+
+.grid-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 320px;
+  padding: 1rem;
+}
+
+.hero {
+  display: grid;
+  grid-gap: 20px;
+  align-items: center;
+}
+.data{
+  width: 100%;
+}
+/* Styly pro progress bar */
+.progress-bar {
+  width: 100%;
+  height: 2.9rem;
+  margin-top: 0.7rem;
+  margin-bottom: 0.7rem;
+  background-color: #FBFBFD;
+  border-radius: 5px;
+  box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.3);
+}
+
+#div-social, #div-education, #div-work, #div-research, #div-other {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: #272829;
+  font-weight: 500;
+  height: 2.5rem;
+  padding: 0.2rem 0.2rem 0.2rem 1rem;
+  font-size: 0.7rem;
+  border-radius: 5px;
+  background-color: #D8D9DA;
+  transition: background-color 0.3s, filter 0.3s;
+}
+
+#div-social:hover, #div-education:hover, #div-work:hover, #div-research:hover, #div-other:hover {
+  cursor: pointer;
+  background-color: #D8D9DA;
+  filter: brightness(1.1);
+}
+
+#detailed-data{
+  padding: 10px;
+}
+.detailed-item{
+  background-color: white;
+  border-radius: 5px;
+  padding: 10px;
+  margin: 10px;
+}
+.detailed-item a{
+font-size: 0.8rem;
+font-weight: 800;
+text-decoration: none;
+color: #272829;
+}
+/* Styly pro tlačítko Clear Data */
+#clear-data-button {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+#clear-data-button:hover {
+  background-color: #45a049;
+}
+
+#clear-data-button:active {
+  background-color: #3d8b3d;
+}
+
+/* Styly pro tlačítko Donate */
+.donate {
+  display: flex;
+  justify-content: center;
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  text-decoration: none;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* Styly pro footer */
+.footer {
+  opacity: 0;
+  animation: fadeIn 1s ease-in-out forwards;
+  animation-delay: 2s;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Styly pro autorovy ikony */
+.author {
+  display: flex;
+  flex-direction: row;
+}
+
+  </style>
 </head>
 <body>
-
-    <h1>Watcher</h1>
+  <div class="grid-container">
+    <a href="#" class="hero-text">
+      <div class="hero">
+        <h1 class="hero-text">Watcher</h1>
+        <div class="logo"></div>
+      </div>
+    </a>
     <h2>Your personal procrastination killer</h2>
-    <p>This statistics shows you your actual focus in opens tabs. </p>
-    <ul>
-      
-    </ul>
-    <script src="./popup.js"></script>
-  </body>
+    <button id="clear-data-button">Clear Data</button>
+    <div class="data">
+      <div class="progress-bar">
+        <div id="div-social"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-education"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-work"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-research"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-other"></div>
+      </div>
+      <div class="transparent"></div>
+    </div>
+    <div id="detailed-data">
+      <!-- Your detailed data content here -->
+    </div>
+    <div class="footer">
+      <p>Watcher is free! I don't collect your data. It's designed for quick stats about your internet usage time. If you enjoy using Watcher, please consider donating. Your honesty would be greatly appreciated.</p>
+      <button id="donate-button" class="donate">Donate</button>
+    </div>
+    <div class="author">
+      <p>Created by Pavel Konrad</p>
+      <img src="../images/instagram.png" alt="instagram">
+      <img src="../images/github.png" alt="github">
+      <img src="../images/linkedin.png" alt="linkedin">
+    </div>
+  </div>
+  <script src="./popup.js"></script>
+</body>
 </html>
