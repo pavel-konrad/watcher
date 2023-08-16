@@ -123,6 +123,27 @@ class PopupUI {
     chrome.tabs.create({ url: 'https://www.paypal.com/donate/?hosted_button_id=3SXLYVB58ADJ2' });
   }
 }
+const scrollToTopButton = document.getElementById("scrollToTop");
+
+// Funkce pro zobrazení tlačítka, když uživatel posune dolů
+window.onscroll = function() {
+  if (document.body.scrollTop > 1200 || document.documentElement.scrollTop > 300) {
+    scrollToTopButton.style.display = "block";
+  } else {
+    scrollToTopButton.style.display = "none";
+  }
+};
+
+// Funkce pro posunutí zpět nahoru
+function scrollToTop() {
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+// Připojení události kliknutí
+scrollToTopButton.addEventListener("click", scrollToTop);
 
 document.addEventListener('DOMContentLoaded', () => {
   new PopupUI();

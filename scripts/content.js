@@ -52,3 +52,4 @@ class PageVisitTracker {
 window.onload = function() {
   new PageVisitTracker();
 }
+
