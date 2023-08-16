@@ -28,25 +28,24 @@ class PageVisitsTracker {
     });
   }
   handleTabActivated = (activeInfo) => {
-    if (this.activeTabId !== null) {
-      const endTime = new Date().getTime();
-      const timeSpent = endTime - this.activeStartTime;
-  
-      // Verify ID tab
-      if (typeof this.activeTabId === 'number') {
-        chrome.tabs.get(this.activeTabId, (tab) => {
-          if (chrome.runtime.lastError || !tab || !tab.url) {
-            console.warn(`Tab ${this.activeTabId} not found, or is a chrome URL, or no URL property:`, chrome.runtime.lastError);
-            return; // V případě chyby, chrome URL nebo chybějící URL se zbytek kódu neprovede
-          }
-          this.savePageVisitData(null, tab.url, timeSpent, tab.title);
-        });
-      }
+  if (this.activeTabId !== null) {
+    const endTime = new Date().getTime();
+    const timeSpent = endTime - this.activeStartTime;
+
+    if (typeof this.activeTabId === 'number') {
+      chrome.tabs.get(this.activeTabId, (tab) => {
+        if (chrome.runtime.lastError || !tab || !tab.url || tab.url.startsWith('chrome://')) {
+          console.warn(`Tab ${this.activeTabId} not found, or is a chrome URL, or no URL property:`, chrome.runtime.lastError);
+          return; // V případě chyby, chrome URL nebo chybějící URL se zbytek kódu neprovede
+        }
+        this.savePageVisitData(null, tab.url, timeSpent, tab.title);
+      });
     }
-  
-    this.activeTabId = activeInfo.tabId;
-    this.activeStartTime = new Date().getTime();
-  };
+  }
+
+  this.activeTabId = activeInfo.tabId;
+  this.activeStartTime = new Date().getTime();
+};
 
 handleTabUpdated = (tabId, changeInfo, tab) => {
   if (tabId === this.activeTabId && changeInfo.status === 'complete') {
@@ -91,7 +90,6 @@ handleTabUpdated = (tabId, changeInfo, tab) => {
   }
 
   savePageVisitData(ipAddress, url, timeSpent, pageTitle) {
-    // Pokud některá z potřebných informací chybí, neukládáme záznam
     if (!url || !timeSpent || !pageTitle) {
       console.log('Missing data, not saving:', { ipAddress, url, timeSpent, pageTitle });
       return;
@@ -100,12 +98,21 @@ handleTabUpdated = (tabId, changeInfo, tab) => {
     chrome.storage.local.get({ pageVisits: [] }, data => {
       const pageVisits = data.pageVisits;
   
-      pageVisits.unshift({
-        ipAddress: ipAddress,
-        url: url,
-        timeSpent: timeSpent,
-        pageTitle: pageTitle,
-      });
+      // Najděte existující záznam s touto URL
+      const existingVisitIndex = pageVisits.findIndex(visit => visit.url === url);
+  
+      if (existingVisitIndex > -1) {
+        // Pokud záznam existuje, aktualizujte čas strávený
+        pageVisits[existingVisitIndex].timeSpent += timeSpent;
+      } else {
+        // Pokud záznam neexistuje, přidejte nový záznam
+        pageVisits.unshift({
+          ipAddress: ipAddress,
+          url: url,
+          timeSpent: timeSpent,
+          pageTitle: pageTitle,
+        });
+      }
   
       chrome.storage.local.set({ pageVisits: pageVisits }, () => {
         console.log('Page visits stored:', pageVisits);
@@ -113,30 +120,30 @@ handleTabUpdated = (tabId, changeInfo, tab) => {
     });
   }
 
-  async getCategorizedPageVisits() {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(['pageVisits'], data => {
-        const pageVisits = data.pageVisits || [];
+async getCategorizedPageVisits() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(['pageVisits'], data => {
+      const pageVisits = Object.values(data.pageVisits || {});
 
-        const categorizedData = {
-          social: [],
-          education: [],
-          work: [],
-          research: [],
-          other: [],
-        };
+      const categorizedData = {
+        social: [],
+        education: [],
+        work: [],
+        research: [],
+        other: [],
+      };
 
-        pageVisits.forEach(visit => {
-          const category = this.categorizePageVisit(visit);
-          categorizedData[category].push(visit);
-        });
-
-        const categoryPercentages = this.calculateCategoryPercentages(categorizedData);
-
-        resolve({ categorizedData, categoryPercentages });
+      pageVisits.forEach(visit => {
+        const category = this.categorizePageVisit(visit);
+        categorizedData[category].push(visit);
       });
+
+      const categoryPercentages = this.calculateCategoryPercentages(categorizedData);
+
+      resolve({ categorizedData, categoryPercentages });
     });
-  }
+  });
+}
 
   categorizePageVisit(visit) {
     const url = visit.url || ''; // Ověřte, zda url existuje

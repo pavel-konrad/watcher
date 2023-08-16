@@ -26,19 +26,29 @@ class PageVisitTracker {
 
     window.addEventListener('beforeunload', tabChangedListener);
   }
+
   savePageVisitData(timeSpent) {
-    chrome.runtime.sendMessage(
-      {
-        type: 'savePageVisitData',
-        url: this.currentUrl,
-        timeSpent: timeSpent,
-        pageTitle: this.pageTitle,
-      },
-      response => {
-        console.log(response.message);
-      }
-    );
+    // Ověřte, zda je záznam jedinečný (například podle URL a času)
+    if (this.currentUrl !== this.lastSavedUrl || timeSpent !== this.lastSavedTimeSpent) {
+      chrome.runtime.sendMessage(
+        {
+          type: 'savePageVisitData',
+          url: this.currentUrl,
+          timeSpent: timeSpent,
+          pageTitle: this.pageTitle,
+        },
+        response => {
+          console.log(response.message);
+        }
+      );
+
+      // Uložte aktuální URL a čas, abyste mohli později ověřit jedinečnost
+      this.lastSavedUrl = this.currentUrl;
+      this.lastSavedTimeSpent = timeSpent;
+    }
   }
 }
 
-new PageVisitTracker();
+window.onload = function() {
+  new PageVisitTracker();
+}
