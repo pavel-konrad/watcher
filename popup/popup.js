@@ -88,7 +88,7 @@ class PopupUI {
       if (timeSpentInSeconds < 60) {
         timeSpentDisplay = `${timeSpentInSeconds.toFixed(0)} sec.`;
       } else if (timeSpentInSeconds < 3600) { // Méně než hodina
-        timeSpentDisplay = `${Math.floor(timeSpentInSeconds / 60)}:${(timeSpentInSeconds % 60).toFixed(0)} min.`;
+        timeSpentDisplay = `${Math.floor(timeSpentInSeconds / 60)} min.`;
       } else {
         const hours = Math.floor(timeSpentInSeconds / 3600);
         const minutes = Math.floor((timeSpentInSeconds % 3600) / 60);
