@@ -20,11 +20,21 @@ body {
   width: 320px;
   padding: 1rem;
 }
+.hero-text{
+  font-size: 1.5em;
+  font-weight: 700;
+  color: #272829;
+  text-decoration: none;
+}
 
 .hero {
   display: grid;
   grid-gap: 20px;
   align-items: center;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow:  0.5px 0.5px 1px rgba(0, 0, 0, 0.3);
+  background-color: white;
 }
 .data{
   width: 100%;
@@ -44,6 +54,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  max-width: 305px;
   color: #272829;
   font-weight: 500;
   height: 2.5rem;
@@ -51,13 +62,14 @@ body {
   font-size: 0.7rem;
   border-radius: 5px;
   background-color: #D8D9DA;
-  transition: background-color 0.3s, filter 0.3s;
+  transition: background-color 0.3 ease, filter 0.3s ease;
 }
 
 #div-social:hover, #div-education:hover, #div-work:hover, #div-research:hover, #div-other:hover {
   cursor: pointer;
-  background-color: #D8D9DA;
-  filter: brightness(1.1);
+  color: #000000;
+  background-color: #e6e7e7;
+  filter: brightness(0.6);
 }
 
 #detailed-data{
@@ -70,7 +82,16 @@ body {
   padding: 10px;
   margin: 10px;
   box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+  transition: background-color 0.3s ease, box-shadow 0.5s ease-in-out, width 0.3s ease;
 }
+
+.detailed-item:hover{
+  width: 279px;
+  box-shadow: inset 1px 1px 1px rgba(0, 0, 0, 0.3);;
+  filter: brightness(0.9);
+
+}
+
 .detailed-item a{
 font-size: 0.8rem;
 font-weight: 800;
@@ -139,14 +160,15 @@ color: #272829;
 </head>
 <body>
   <div class="grid-container">
-    <a href="#" class="hero-text">
       <div class="hero">
-        <h1 class="hero-text">Watcher</h1>
+        <a href="#" class="hero-text">
+        <h1>Watcher</h1>
         <div class="logo"></div>
-      </div>
+    
     </a>
     <h2>Your personal procrastination killer</h2>
     <button id="clear-data-button">Clear Data</button>
+      </div>
     <div class="data">
       <div class="progress-bar">
         <div id="div-social"></div>

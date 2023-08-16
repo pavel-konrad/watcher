@@ -113,7 +113,7 @@ handleTabUpdated = (tabId, changeInfo, tab) => {
           pageTitle: pageTitle,
         });
       }
-  
+      pageVisits.sort((a, b) => b.timeSpent - a.timeSpent);
       chrome.storage.local.set({ pageVisits: pageVisits }, () => {
         console.log('Page visits stored:', pageVisits);
       });
