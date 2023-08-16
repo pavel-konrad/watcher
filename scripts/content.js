@@ -8,16 +8,24 @@ class PageVisitTracker {
     this.pageTitle = document.title;
     this.startTime = new Date().getTime();
 
-    const unloadListener = () => {
+    const tabChangedListener = () => {
       const endTime = new Date().getTime();
       const timeSpent = endTime - this.startTime;
       this.savePageVisitData(timeSpent);
-      window.removeEventListener('beforeunload', unloadListener);
     };
 
-    window.addEventListener('beforeunload', unloadListener);
-  }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        tabChangedListener();
+      } else {
+        this.startTime = new Date().getTime();
+        this.currentUrl = window.location.href;
+        this.pageTitle = document.title;
+      }
+    });
 
+    window.addEventListener('beforeunload', tabChangedListener);
+  }
   savePageVisitData(timeSpent) {
     chrome.runtime.sendMessage(
       {

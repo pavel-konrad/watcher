@@ -62,7 +62,7 @@ class PopupUI {
     const categoryName = this.progressBarCategories[progressBarId] || 'Unknown';
     
     if (typeof percentage === 'number') {
-      progressBarDiv.innerHTML = `${categoryName}: ${percentage.toFixed(1)}%`; // zobrazit procentuální hodnotu v divu
+      progressBarDiv.innerHTML = `${categoryName}: ${percentage.toFixed(0)}%`; // zobrazit procentuální hodnotu v divu
     } else {
       progressBarDiv.innerHTML = `${categoryName}: none`;
     }
@@ -83,9 +83,17 @@ class PopupUI {
       visitUrl.target = '_blank';
   
       const timeSpentInSeconds = visit.timeSpent / 1000;
-      const timeSpentDisplay = timeSpentInSeconds < 60
-        ? `${timeSpentInSeconds.toFixed(2)} seconds`
-        : `${(timeSpentInSeconds / 60).toFixed(2)} minutes`;
+      let timeSpentDisplay;
+      
+      if (timeSpentInSeconds < 60) {
+        timeSpentDisplay = `${timeSpentInSeconds.toFixed(0)} sec.`;
+      } else if (timeSpentInSeconds < 3600) { // Méně než hodina
+        timeSpentDisplay = `${Math.floor(timeSpentInSeconds / 60)}:${(timeSpentInSeconds % 60).toFixed(0)} min.`;
+      } else {
+        const hours = Math.floor(timeSpentInSeconds / 3600);
+        const minutes = Math.floor((timeSpentInSeconds % 3600) / 60);
+        timeSpentDisplay = `${hours}:${minutes < 10 ? '0' : ''}${minutes} hours`;
+      }
   
         const visitTimeSpent = document.createElement('p');
         visitTimeSpent.textContent = 'Time spent: ';

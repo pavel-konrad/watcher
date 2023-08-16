@@ -1,9 +1,13 @@
 class PageVisitsTracker {
   constructor() {
+    this.activeTabId = null;
+    this.activeStartTime = null;
     this.init();
   }
 
   init = () => { // Toto je arrow funkce
+    chrome.tabs.onActivated.addListener(this.handleTabActivated);
+    chrome.tabs.onUpdated.addListener(this.handleTabUpdated);
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.type === 'savePageVisitData') {
         this.handleSavePageVisitData(request, sendResponse);
@@ -23,6 +27,23 @@ class PageVisitsTracker {
       }
     });
   }
+  handleTabActivated = (activeInfo) => {
+  if (this.activeTabId !== null) {
+    const endTime = new Date().getTime();
+    const timeSpent = endTime - this.activeStartTime;
+    chrome.tabs.get(this.activeTabId, tab => {
+      this.savePageVisitData(null, tab.url, timeSpent, tab.title);
+    });
+  }
+  this.activeTabId = activeInfo.tabId;
+  this.activeStartTime = new Date().getTime();
+};
+
+handleTabUpdated = (tabId, changeInfo, tab) => {
+  if (tabId === this.activeTabId && changeInfo.status === 'complete') {
+    this.activeStartTime = new Date().getTime();
+  }
+};
   clearAllData(callback) {
     chrome.storage.local.remove(['pageVisits'], () => {
       if (chrome.runtime.lastError) {
@@ -40,14 +61,8 @@ class PageVisitsTracker {
     const timeSpent = request.timeSpent;
     const pageTitle = request.pageTitle;
 
-    this.getUserIpAddress()
-      .then(userIpAddress => {
-        this.savePageVisitData(userIpAddress, url, timeSpent, pageTitle);
-        sendResponse({ message: 'Data was stored.' });
-      })
-      .catch(error => {
-        console.error('Error getting IP', error);
-      });
+    this.savePageVisitData(null, url, timeSpent, pageTitle); // Null jako IP adresa
+    sendResponse({ message: 'Data was stored.' });
   }
 
   handleGetCategorizedPageVisits(sendResponse) {
@@ -67,18 +82,24 @@ class PageVisitsTracker {
   }
 
   savePageVisitData(ipAddress, url, timeSpent, pageTitle) {
+    // Pokud některá z potřebných informací chybí, neukládáme záznam
+    if (!url || !timeSpent || !pageTitle) {
+      console.log('Missing data, not saving:', { ipAddress, url, timeSpent, pageTitle });
+      return;
+    }
+  
     chrome.storage.local.get({ pageVisits: [] }, data => {
       const pageVisits = data.pageVisits;
-
+  
       pageVisits.unshift({
         ipAddress: ipAddress,
         url: url,
         timeSpent: timeSpent,
         pageTitle: pageTitle,
       });
-
+  
       chrome.storage.local.set({ pageVisits: pageVisits }, () => {
-        console.log('Page visits store:', pageVisits);
+        console.log('Page visits stored:', pageVisits);
       });
     });
   }
@@ -109,8 +130,8 @@ class PageVisitsTracker {
   }
 
   categorizePageVisit(visit) {
-    const url = visit.url;
-    const title = visit.pageTitle.toLowerCase(); // Předpokládá se, že klíčová slova jsou malými písmeny
+    const url = visit.url || ''; // Ověřte, zda url existuje
+    const title = visit.pageTitle ? visit.pageTitle.toLowerCase() : ''; // Ověřte, zda pageTitle existuje
   
     const keywordToCategoryMap = {
       social: ['facebook.com', 'twitter.com', 'instagram.com'],
@@ -122,16 +143,17 @@ class PageVisitsTracker {
   
     for (const category in keywordToCategoryMap) {
       const keywords = keywordToCategoryMap[category];
-      for (const keyword of keywords) {
-        if (url.includes(keyword) || title.includes(keyword)) { // Kontroluje klíčová slova jak v URL, tak v názvu stránky
-          return category;
+      if (keywords) { // Ověřte, zda klíčová slova existují
+        for (const keyword of keywords) {
+          if (url.includes(keyword) || title.includes(keyword)) {
+            return category;
+          }
         }
       }
     }
-    
-    return 'other'; // Pokud nebyla nalezena žádná odpovídající klíčová slova, vrátí kategorii "other"
+      
+    return 'other';
   }
-
   calculateCategoryPercentages(categorizedData) {
     const totalVisits = Object.values(categorizedData).reduce((total, categoryData) => total + categoryData.length, 0);
   
