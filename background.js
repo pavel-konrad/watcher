@@ -28,16 +28,25 @@ class PageVisitsTracker {
     });
   }
   handleTabActivated = (activeInfo) => {
-  if (this.activeTabId !== null) {
-    const endTime = new Date().getTime();
-    const timeSpent = endTime - this.activeStartTime;
-    chrome.tabs.get(this.activeTabId, tab => {
-      this.savePageVisitData(null, tab.url, timeSpent, tab.title);
-    });
-  }
-  this.activeTabId = activeInfo.tabId;
-  this.activeStartTime = new Date().getTime();
-};
+    if (this.activeTabId !== null) {
+      const endTime = new Date().getTime();
+      const timeSpent = endTime - this.activeStartTime;
+  
+      // Verify ID tab
+      if (typeof this.activeTabId === 'number') {
+        chrome.tabs.get(this.activeTabId, (tab) => {
+          if (chrome.runtime.lastError || !tab || !tab.url) {
+            console.warn(`Tab ${this.activeTabId} not found, or is a chrome URL, or no URL property:`, chrome.runtime.lastError);
+            return; // V případě chyby, chrome URL nebo chybějící URL se zbytek kódu neprovede
+          }
+          this.savePageVisitData(null, tab.url, timeSpent, tab.title);
+        });
+      }
+    }
+  
+    this.activeTabId = activeInfo.tabId;
+    this.activeStartTime = new Date().getTime();
+  };
 
 handleTabUpdated = (tabId, changeInfo, tab) => {
   if (tabId === this.activeTabId && changeInfo.status === 'complete') {
