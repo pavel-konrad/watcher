@@ -48,7 +48,31 @@ class PageVisitTracker {
     }
   }
 }
+function addKeyword(keyword, category) {
+  chrome.runtime.sendMessage(
+    {
+      type: 'addKeyword',
+      keyword: keyword,
+      category: category,
+    },
+    response => {
+      console.log(response.message);
+    }
+  );
+}
 
+function removeKeyword(keyword, category) {
+  chrome.runtime.sendMessage(
+    {
+      type: 'removeKeyword',
+      keyword: keyword,
+      category: category,
+    },
+    response => {
+      console.log(response.message);
+    }
+  );
+}
 window.onload = function() {
   new PageVisitTracker();
 }
