@@ -1,4 +1,4 @@
-pojdme na to znovu a jinak. Pojdme nejdriv vyresit jak zajistit, aby rozsireni dokazalo sledovat aktivni zalozku: 
+Potrebuji, aby skript zobrazil v pridanem formulari nadefinovana klicova slova. Zaroven promaz radky kodu, ktere jsou zbytecne
 //conten.js
 class PageVisitTracker {
   constructor() {
@@ -10,39 +10,68 @@ class PageVisitTracker {
     this.pageTitle = document.title;
     this.startTime = new Date().getTime();
 
-    const unloadListener = () => {
+    const tabChangedListener = () => {
       const endTime = new Date().getTime();
       const timeSpent = endTime - this.startTime;
       this.savePageVisitData(timeSpent);
-      window.removeEventListener('beforeunload', unloadListener);
     };
 
-    window.addEventListener('beforeunload', unloadListener);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        tabChangedListener();
+      } else {
+        this.startTime = new Date().getTime();
+        this.currentUrl = window.location.href;
+        this.pageTitle = document.title;
+      }
+    });
+
+    window.addEventListener('beforeunload', tabChangedListener);
   }
 
   savePageVisitData(timeSpent) {
-    chrome.runtime.sendMessage(
-      {
-        type: 'savePageVisitData',
-        url: this.currentUrl,
-        timeSpent: timeSpent,
-        pageTitle: this.pageTitle,
-      },
-      response => {
-        console.log(response.message);
-      }
-    );
+    // Ověřte, zda je záznam jedinečný (například podle URL a času)
+    if (this.currentUrl !== this.lastSavedUrl || timeSpent !== this.lastSavedTimeSpent) {
+      chrome.runtime.sendMessage(
+        {
+          type: 'savePageVisitData',
+          url: this.currentUrl,
+          timeSpent: timeSpent,
+          pageTitle: this.pageTitle,
+        },
+        response => {
+          console.log(response.message);
+        }
+      );
+
+      // Uložte aktuální URL a čas, abyste mohli později ověřit jedinečnost
+      this.lastSavedUrl = this.currentUrl;
+      this.lastSavedTimeSpent = timeSpent;
+    }
   }
 }
 
-new PageVisitTracker();
+window.onload = function() {
+  new PageVisitTracker();
+}
+
 //background.js
 class PageVisitsTracker {
   constructor() {
+    this.activeTabId = null;
+    this.activeStartTime = null;
     this.init();
   }
 
   init = () => { // Toto je arrow funkce
+    
+    chrome.tabs.onActivated.addListener(this.handleTabActivated);
+    chrome.tabs.onUpdated.addListener(this.handleTabUpdated);
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.type === 'getKeywords') {
+        this.handleGetKeywords(sendResponse);
+        return true;}}),
+
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.type === 'savePageVisitData') {
         this.handleSavePageVisitData(request, sendResponse);
@@ -60,8 +89,34 @@ class PageVisitsTracker {
         });
         return true; // Musíme vrátit true, aby bylo možné zavolat sendResponse asynchronně
       }
+      
     });
   }
+  handleTabActivated = (activeInfo) => {
+  if (this.activeTabId !== null) {
+    const endTime = new Date().getTime();
+    const timeSpent = endTime - this.activeStartTime;
+
+    if (typeof this.activeTabId === 'number') {
+      chrome.tabs.get(this.activeTabId, (tab) => {
+        if (chrome.runtime.lastError || !tab || !tab.url || tab.url.startsWith('chrome://')) {
+          console.warn(`Tab ${this.activeTabId} not found, or is a chrome URL, or no URL property:`, chrome.runtime.lastError);
+          return; // V případě chyby, chrome URL nebo chybějící URL se zbytek kódu neprovede
+        }
+        this.savePageVisitData(null, tab.url, timeSpent, tab.title);
+      });
+    }
+  }
+
+  this.activeTabId = activeInfo.tabId;
+  this.activeStartTime = new Date().getTime();
+};
+
+handleTabUpdated = (tabId, changeInfo, tab) => {
+  if (tabId === this.activeTabId && changeInfo.status === 'complete') {
+    this.activeStartTime = new Date().getTime();
+  }
+};
   clearAllData(callback) {
     chrome.storage.local.remove(['pageVisits'], () => {
       if (chrome.runtime.lastError) {
@@ -79,14 +134,8 @@ class PageVisitsTracker {
     const timeSpent = request.timeSpent;
     const pageTitle = request.pageTitle;
 
-    this.getUserIpAddress()
-      .then(userIpAddress => {
-        this.savePageVisitData(userIpAddress, url, timeSpent, pageTitle);
-        sendResponse({ message: 'Data was stored.' });
-      })
-      .catch(error => {
-        console.error('Error getting IP', error);
-      });
+    this.savePageVisitData(null, url, timeSpent, pageTitle); // Null jako IP adresa
+    sendResponse({ message: 'Data was stored.' });
   }
 
   handleGetCategorizedPageVisits(sendResponse) {
@@ -98,7 +147,17 @@ class PageVisitsTracker {
         console.error('Error getting category data', error);
       });
   }
-
+  handleGetKeywords = (sendResponse) => {
+    const keywordToCategoryMap = {
+      social: ['facebook.com', 'twitter.com', 'instagram.com'],
+      education: ['coursera.org', 'udemy.com', 'khanacademy.org'],
+      work: ['slack', 'microsoft', 'mail', 'email'],
+      research: ['paper', 'scholar', 'article'],
+      // Další klíčová slova a kategorie...
+    };
+    const keywords = Object.keys(keywordToCategoryMap);
+    sendResponse({ keywords: keywords });
+  };
   getUserIpAddress() {
     return fetch('https://api.ipify.org?format=json')
       .then(response => response.json())
@@ -106,50 +165,64 @@ class PageVisitsTracker {
   }
 
   savePageVisitData(ipAddress, url, timeSpent, pageTitle) {
+    if (!url || !timeSpent || !pageTitle) {
+      console.log('Missing data, not saving:', { ipAddress, url, timeSpent, pageTitle });
+      return;
+    }
+  
     chrome.storage.local.get({ pageVisits: [] }, data => {
       const pageVisits = data.pageVisits;
-
-      pageVisits.unshift({
-        ipAddress: ipAddress,
-        url: url,
-        timeSpent: timeSpent,
-        pageTitle: pageTitle,
-      });
-
-      chrome.storage.local.set({ pageVisits: pageVisits }, () => {
-        console.log('Page visits store:', pageVisits);
-      });
-    });
-  }
-
-  async getCategorizedPageVisits() {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(['pageVisits'], data => {
-        const pageVisits = data.pageVisits || [];
-
-        const categorizedData = {
-          social: [],
-          education: [],
-          work: [],
-          research: [],
-          other: [],
-        };
-
-        pageVisits.forEach(visit => {
-          const category = this.categorizePageVisit(visit);
-          categorizedData[category].push(visit);
+  
+      // Najděte existující záznam s touto URL
+      const existingVisitIndex = pageVisits.findIndex(visit => visit.url === url);
+  
+      if (existingVisitIndex > -1) {
+        // Pokud záznam existuje, aktualizujte čas strávený
+        pageVisits[existingVisitIndex].timeSpent += timeSpent;
+      } else {
+        // Pokud záznam neexistuje, přidejte nový záznam
+        pageVisits.unshift({
+          ipAddress: ipAddress,
+          url: url,
+          timeSpent: timeSpent,
+          pageTitle: pageTitle,
         });
-
-        const categoryPercentages = this.calculateCategoryPercentages(categorizedData);
-
-        resolve({ categorizedData, categoryPercentages });
+      }
+      pageVisits.sort((a, b) => b.timeSpent - a.timeSpent);
+      chrome.storage.local.set({ pageVisits: pageVisits }, () => {
+        console.log('Page visits stored:', pageVisits);
       });
     });
   }
+
+async getCategorizedPageVisits() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(['pageVisits'], data => {
+      const pageVisits = Object.values(data.pageVisits || {});
+
+      const categorizedData = {
+        social: [],
+        education: [],
+        work: [],
+        research: [],
+        other: [],
+      };
+
+      pageVisits.forEach(visit => {
+        const category = this.categorizePageVisit(visit);
+        categorizedData[category].push(visit);
+      });
+
+      const categoryPercentages = this.calculateCategoryPercentages(categorizedData);
+
+      resolve({ categorizedData, categoryPercentages });
+    });
+  });
+}
 
   categorizePageVisit(visit) {
-    const url = visit.url;
-    const title = visit.pageTitle.toLowerCase(); // Předpokládá se, že klíčová slova jsou malými písmeny
+    const url = visit.url || ''; // Ověřte, zda url existuje
+    const title = visit.pageTitle ? visit.pageTitle.toLowerCase() : ''; // Ověřte, zda pageTitle existuje
   
     const keywordToCategoryMap = {
       social: ['facebook.com', 'twitter.com', 'instagram.com'],
@@ -158,19 +231,21 @@ class PageVisitsTracker {
       research: ['paper', 'scholar', 'article'],
       // Další klíčová slova a kategorie...
     };
-  
+   
+
     for (const category in keywordToCategoryMap) {
       const keywords = keywordToCategoryMap[category];
-      for (const keyword of keywords) {
-        if (url.includes(keyword) || title.includes(keyword)) { // Kontroluje klíčová slova jak v URL, tak v názvu stránky
-          return category;
+      if (keywords) { // Ověřte, zda klíčová slova existují
+        for (const keyword of keywords) {
+          if (url.includes(keyword) || title.includes(keyword)) {
+            return category;
+          }
         }
       }
     }
-    
-    return 'other'; // Pokud nebyla nalezena žádná odpovídající klíčová slova, vrátí kategorii "other"
+      
+    return 'other';
   }
-
   calculateCategoryPercentages(categorizedData) {
     const totalVisits = Object.values(categorizedData).reduce((total, categoryData) => total + categoryData.length, 0);
   
