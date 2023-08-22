@@ -81,7 +81,20 @@ color: #000000;
 background-color: #e6e7e7;
 filter: brightness(0.6);
 }
-
+.keywords-div {
+    padding: 10px;
+  }
+  
+  .keywords-div span {
+    margin-right: 5px;
+  }
+  
+  
+  
+  
+  
+  
+  
 #detailed-data{
 padding: 10px;
 }

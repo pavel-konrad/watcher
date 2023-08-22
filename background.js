@@ -1,15 +1,32 @@
 class PageVisitsTracker {
+  
   constructor() {
     this.activeTabId = null;
     this.activeStartTime = null;
     this.init();
   }
 
-  init = () => { // Toto je arrow funkce
+  init = () => {
+    chrome.storage.local.get(['keywordToCategoryMap'], data => {
+      this.keywordToCategoryMap = data.keywordToCategoryMap || {
+        social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
+        education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
+        work: ['slack', 'microsoft', 'mail', 'email', 'github'],
+        research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
+        // Další klíčová slova a kategorie...
+        
+      };
+      
+    });
+    
     chrome.tabs.onActivated.addListener(this.handleTabActivated);
     chrome.tabs.onUpdated.addListener(this.handleTabUpdated);
+
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      if (request.type === 'savePageVisitData') {
+      if (request.type === 'getKeywords') {
+        this.handleGetKeywords(sendResponse);
+        return true;
+      } else if (request.type === 'savePageVisitData') {
         this.handleSavePageVisitData(request, sendResponse);
         return true;
       } else if (request.type === 'getCategorizedPageVisits') {
@@ -23,9 +40,34 @@ class PageVisitsTracker {
             sendResponse({ message: 'Failed to clear data.' });
           }
         });
-        return true; // Musíme vrátit true, aby bylo možné zavolat sendResponse asynchronně
+        return true;
       }
     });
+  }
+  getKeywordsByCategory(category) {
+    return this.keywordToCategoryMap[category] || [];
+  }
+  
+
+  removeKeywordFromCategory(keyword, category) {
+    const keywords = this.keywordToCategoryMap[category];
+    const index = keywords.indexOf(keyword);
+    if (index > -1) {
+      keywords.splice(index, 1);
+      chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap }, () => {
+        console.log(`Keyword ${keyword} removed from category ${category}`);
+      });
+      return true;
+    }
+    console.log(`Keyword ${keyword} not found in category ${category}`);
+    return false;
+  }
+  addKeywordToCategory(keyword, category) {
+    this.keywordToCategoryMap[category].push(keyword);
+    chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap }, () => {
+      console.log(`Keyword ${keyword} added to category ${category}`);
+    });
+    return true;
   }
   handleTabActivated = (activeInfo) => {
   if (this.activeTabId !== null) {
@@ -82,7 +124,19 @@ handleTabUpdated = (tabId, changeInfo, tab) => {
         console.error('Error getting category data', error);
       });
   }
-
+ handleGetKeywords = (sendResponse) => {
+    const keywordToCategoryMap = {
+      social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
+        education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
+        work: ['slack', 'microsoft', 'mail', 'email', 'github'],
+        research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
+      // Další klíčová slova a kategorie...
+    };
+    const keywords = Object.values(this.keywordToCategoryMap).flat();
+  sendResponse({ keywords: keywords });
+  
+};
+  
   getUserIpAddress() {
     return fetch('https://api.ipify.org?format=json')
       .then(response => response.json())
@@ -150,13 +204,14 @@ async getCategorizedPageVisits() {
     const title = visit.pageTitle ? visit.pageTitle.toLowerCase() : ''; // Ověřte, zda pageTitle existuje
   
     const keywordToCategoryMap = {
-      social: ['facebook.com', 'twitter.com', 'instagram.com'],
-      education: ['coursera.org', 'udemy.com', 'khanacademy.org'],
-      work: ['slack', 'microsoft', 'mail', 'email'],
-      research: ['paper', 'scholar', 'article'],
+      social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
+      education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
+      work: ['slack', 'microsoft', 'mail', 'email', 'github', 'figma', 'adobe'],
+      research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
       // Další klíčová slova a kategorie...
     };
-  
+   
+
     for (const category in keywordToCategoryMap) {
       const keywords = keywordToCategoryMap[category];
       if (keywords) { // Ověřte, zda klíčová slova existují

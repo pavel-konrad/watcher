@@ -1,50 +1,34 @@
-pojdme na to znovu a jinak. Pojdme nejdriv vyresit jak zajistit, aby rozsireni dokazalo sledovat aktivni zalozku: 
-//conten.js
-class PageVisitTracker {
-  constructor() {
-    this.startTracking();
-  }
-
-  startTracking() {
-    this.currentUrl = window.location.href;
-    this.pageTitle = document.title;
-    this.startTime = new Date().getTime();
-
-    const unloadListener = () => {
-      const endTime = new Date().getTime();
-      const timeSpent = endTime - this.startTime;
-      this.savePageVisitData(timeSpent);
-      window.removeEventListener('beforeunload', unloadListener);
-    };
-
-    window.addEventListener('beforeunload', unloadListener);
-  }
-
-  savePageVisitData(timeSpent) {
-    chrome.runtime.sendMessage(
-      {
-        type: 'savePageVisitData',
-        url: this.currentUrl,
-        timeSpent: timeSpent,
-        pageTitle: this.pageTitle,
-      },
-      response => {
-        console.log(response.message);
-      }
-    );
-  }
-}
-
-new PageVisitTracker();
-//background.js
+Takhle vypada muj kod nyni:
+// background.js
 class PageVisitsTracker {
+  
   constructor() {
+    this.activeTabId = null;
+    this.activeStartTime = null;
     this.init();
   }
 
-  init = () => { // Toto je arrow funkce
+  init = () => {
+    chrome.storage.local.get(['keywordToCategoryMap'], data => {
+      this.keywordToCategoryMap = data.keywordToCategoryMap || {
+        social: ['facebook.com', 'twitter.com', 'instagram.com'],
+        education: ['coursera.org', 'udemy.com', 'khanacademy.org'],
+        work: ['slack', 'microsoft', 'mail', 'email'],
+        research: ['paper', 'scholar', 'article'],
+        // Další klíčová slova a kategorie...
+        
+      };
+      
+    });
+    
+    chrome.tabs.onActivated.addListener(this.handleTabActivated);
+    chrome.tabs.onUpdated.addListener(this.handleTabUpdated);
+
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      if (request.type === 'savePageVisitData') {
+      if (request.type === 'getKeywords') {
+        this.handleGetKeywords(sendResponse);
+        return true;
+      } else if (request.type === 'savePageVisitData') {
         this.handleSavePageVisitData(request, sendResponse);
         return true;
       } else if (request.type === 'getCategorizedPageVisits') {
@@ -58,10 +42,60 @@ class PageVisitsTracker {
             sendResponse({ message: 'Failed to clear data.' });
           }
         });
-        return true; // Musíme vrátit true, aby bylo možné zavolat sendResponse asynchronně
+        return true;
       }
     });
   }
+  getKeywordsByCategory(category) {
+    return this.keywordToCategoryMap[category] || [];
+  }
+  
+
+  removeKeywordFromCategory(keyword, category) {
+    const keywords = this.keywordToCategoryMap[category];
+    const index = keywords.indexOf(keyword);
+    if (index > -1) {
+      keywords.splice(index, 1);
+      chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap }, () => {
+        console.log(`Keyword ${keyword} removed from category ${category}`);
+      });
+      return true;
+    }
+    console.log(`Keyword ${keyword} not found in category ${category}`);
+    return false;
+  }
+  addKeywordToCategory(keyword, category) {
+    this.keywordToCategoryMap[category].push(keyword);
+    chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap }, () => {
+      console.log(`Keyword ${keyword} added to category ${category}`);
+    });
+    return true;
+  }
+  handleTabActivated = (activeInfo) => {
+  if (this.activeTabId !== null) {
+    const endTime = new Date().getTime();
+    const timeSpent = endTime - this.activeStartTime;
+
+    if (typeof this.activeTabId === 'number') {
+      chrome.tabs.get(this.activeTabId, (tab) => {
+        if (chrome.runtime.lastError || !tab || !tab.url || tab.url.startsWith('chrome://')) {
+          console.warn(`Tab ${this.activeTabId} not found, or is a chrome URL, or no URL property:`, chrome.runtime.lastError);
+          return; // V případě chyby, chrome URL nebo chybějící URL se zbytek kódu neprovede
+        }
+        this.savePageVisitData(null, tab.url, timeSpent, tab.title);
+      });
+    }
+  }
+
+  this.activeTabId = activeInfo.tabId;
+  this.activeStartTime = new Date().getTime();
+};
+
+handleTabUpdated = (tabId, changeInfo, tab) => {
+  if (tabId === this.activeTabId && changeInfo.status === 'complete') {
+    this.activeStartTime = new Date().getTime();
+  }
+};
   clearAllData(callback) {
     chrome.storage.local.remove(['pageVisits'], () => {
       if (chrome.runtime.lastError) {
@@ -79,14 +113,8 @@ class PageVisitsTracker {
     const timeSpent = request.timeSpent;
     const pageTitle = request.pageTitle;
 
-    this.getUserIpAddress()
-      .then(userIpAddress => {
-        this.savePageVisitData(userIpAddress, url, timeSpent, pageTitle);
-        sendResponse({ message: 'Data was stored.' });
-      })
-      .catch(error => {
-        console.error('Error getting IP', error);
-      });
+    this.savePageVisitData(null, url, timeSpent, pageTitle); // Null jako IP adresa
+    sendResponse({ message: 'Data was stored.' });
   }
 
   handleGetCategorizedPageVisits(sendResponse) {
@@ -98,7 +126,21 @@ class PageVisitsTracker {
         console.error('Error getting category data', error);
       });
   }
-
+  handleGetKeywords = (sendResponse) => {
+    chrome.storage.local.get(['keywordToCategoryMap'], data => {
+      this.keywordToCategoryMap = data.keywordToCategoryMap || {
+        social: ['facebook.com', 'twitter.com', 'instagram.com'],
+        education: ['coursera.org', 'udemy.com', 'khanacademy.org'],
+        work: ['slack', 'microsoft', 'mail', 'email'],
+        research: ['paper', 'scholar', 'article'],
+        // Další klíčová slova a kategorie...
+      };
+  
+      const keywords = Object.values(this.keywordToCategoryMap).flat();
+      sendResponse({ keywords: keywords });
+    });
+  };
+  
   getUserIpAddress() {
     return fetch('https://api.ipify.org?format=json')
       .then(response => response.json())
@@ -106,50 +148,64 @@ class PageVisitsTracker {
   }
 
   savePageVisitData(ipAddress, url, timeSpent, pageTitle) {
+    if (!url || !timeSpent || !pageTitle) {
+      console.log('Missing data, not saving:', { ipAddress, url, timeSpent, pageTitle });
+      return;
+    }
+  
     chrome.storage.local.get({ pageVisits: [] }, data => {
       const pageVisits = data.pageVisits;
-
-      pageVisits.unshift({
-        ipAddress: ipAddress,
-        url: url,
-        timeSpent: timeSpent,
-        pageTitle: pageTitle,
-      });
-
-      chrome.storage.local.set({ pageVisits: pageVisits }, () => {
-        console.log('Page visits store:', pageVisits);
-      });
-    });
-  }
-
-  async getCategorizedPageVisits() {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(['pageVisits'], data => {
-        const pageVisits = data.pageVisits || [];
-
-        const categorizedData = {
-          social: [],
-          education: [],
-          work: [],
-          research: [],
-          other: [],
-        };
-
-        pageVisits.forEach(visit => {
-          const category = this.categorizePageVisit(visit);
-          categorizedData[category].push(visit);
+  
+      // Najděte existující záznam s touto URL
+      const existingVisitIndex = pageVisits.findIndex(visit => visit.url === url);
+  
+      if (existingVisitIndex > -1) {
+        // Pokud záznam existuje, aktualizujte čas strávený
+        pageVisits[existingVisitIndex].timeSpent += timeSpent;
+      } else {
+        // Pokud záznam neexistuje, přidejte nový záznam
+        pageVisits.unshift({
+          ipAddress: ipAddress,
+          url: url,
+          timeSpent: timeSpent,
+          pageTitle: pageTitle,
         });
-
-        const categoryPercentages = this.calculateCategoryPercentages(categorizedData);
-
-        resolve({ categorizedData, categoryPercentages });
+      }
+      pageVisits.sort((a, b) => b.timeSpent - a.timeSpent);
+      chrome.storage.local.set({ pageVisits: pageVisits }, () => {
+        console.log('Page visits stored:', pageVisits);
       });
     });
   }
+
+async getCategorizedPageVisits() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(['pageVisits'], data => {
+      const pageVisits = Object.values(data.pageVisits || {});
+
+      const categorizedData = {
+        social: [],
+        education: [],
+        work: [],
+        research: [],
+        other: [],
+      };
+
+      pageVisits.forEach(visit => {
+        const category = this.categorizePageVisit(visit);
+        categorizedData[category].push(visit);
+      });
+
+      const categoryPercentages = this.calculateCategoryPercentages(categorizedData);
+
+      resolve({ categorizedData, categoryPercentages });
+    });
+  });
+}
 
   categorizePageVisit(visit) {
-    const url = visit.url;
-    const title = visit.pageTitle.toLowerCase(); // Předpokládá se, že klíčová slova jsou malými písmeny
+    const url = visit.url || ''; // Ověřte, zda url existuje
+    const title = visit.pageTitle ? visit.pageTitle.toLowerCase() : ''; // Ověřte, zda pageTitle existuje
   
     const keywordToCategoryMap = {
       social: ['facebook.com', 'twitter.com', 'instagram.com'],
@@ -158,19 +214,21 @@ class PageVisitsTracker {
       research: ['paper', 'scholar', 'article'],
       // Další klíčová slova a kategorie...
     };
-  
+   
+
     for (const category in keywordToCategoryMap) {
       const keywords = keywordToCategoryMap[category];
-      for (const keyword of keywords) {
-        if (url.includes(keyword) || title.includes(keyword)) { // Kontroluje klíčová slova jak v URL, tak v názvu stránky
-          return category;
+      if (keywords) { // Ověřte, zda klíčová slova existují
+        for (const keyword of keywords) {
+          if (url.includes(keyword) || title.includes(keyword)) {
+            return category;
+          }
         }
       }
     }
-    
-    return 'other'; // Pokud nebyla nalezena žádná odpovídající klíčová slova, vrátí kategorii "other"
+      
+    return 'other';
   }
-
   calculateCategoryPercentages(categorizedData) {
     const totalVisits = Object.values(categorizedData).reduce((total, categoryData) => total + categoryData.length, 0);
   
@@ -188,3 +246,326 @@ class PageVisitsTracker {
 
 
 new PageVisitsTracker();
+//popup.js
+class PopupUI {
+  constructor() {
+    this.fetchCategorizedPageVisits();
+    this.progressBarCategories = {
+      '#div-social': 'Social',
+      '#div-education': 'Education',
+      '#div-work': 'Work',
+      '#div-research': 'Research',
+      '#div-other': 'Other',
+    };
+
+    // Iterace přes progress bar kategorie a přidání posluchačů
+    for (const selector in this.progressBarCategories) {
+      const progressBar = document.querySelector(selector);
+      if (progressBar) {
+        progressBar.addEventListener('click', () => this.scrollToSection('#detailed-data'));
+      }
+    }
+
+    this.addClickEvent('#clear-data-button', () => this.clearData());
+    this.addClickEvent('#donate-button', () => this.openDonateLink());
+
+    this.fetchCategorizedPageVisits();
+
+    // Poslat zprávu do backgroundu pro klíčová slova
+    chrome.runtime.sendMessage({ type: 'getKeywords' }, (response) => {
+      const keywords = response.keywords;
+      this.displayKeywords(keywords);
+    });
+  //dale pokracuje
+  }
+  fetchCategorizedPageVisits() {
+    chrome.runtime.sendMessage({ type: 'getCategorizedPageVisits' }, (response) => {
+      const { categorizedData } = response;
+
+      // Pro každou kategorii načtete stránky a zobrazte je v detailed-data
+      for (const category in categorizedData) {
+        this.displayPageVisitsByCategory(categorizedData[category], category);
+      }
+    });
+  }
+  displayPageVisitsByCategory(pageVisits, categoryName) {
+    const detailedDataContainer = document.querySelector('#detailed-data');
+    const categoryDiv = document.createElement('div');
+    categoryDiv.classList.add('category-div');
+  
+    const heading = document.createElement('h2');
+    heading.textContent = categoryName;
+    categoryDiv.appendChild(heading);
+  
+    // Display detailed data
+    detailedDataContainer.appendChild(categoryDiv);
+  
+    // Display keywords for the category
+    this.displayKeywordsForCategory(categoryName);
+  }
+
+  displayKeywordsForCategory(categoryName) {
+    chrome.runtime.sendMessage({ type: 'getKeywords' }, (response) => {
+      const keywords = response.keywords;
+  
+      const keywordContainer = document.querySelector('#keyword-container');
+      const categoryKeywordsDiv = document.createElement('div');
+      categoryKeywordsDiv.classList.add('category-keywords-div');
+  
+      const categoryKeywords = this.getKeywordsByCategory(categoryName, keywords);
+  
+      categoryKeywords.forEach(keyword => {
+        const keywordButton = document.createElement('button');
+        keywordButton.textContent = keyword;
+        keywordButton.addEventListener('click', () => {
+          this.removeKeyword(keyword);
+        });
+        categoryKeywordsDiv.appendChild(keywordButton);
+      });
+  
+      keywordContainer.appendChild(categoryKeywordsDiv);
+    });
+  }
+
+  getKeywordsByCategory(categoryName, keywords) {
+    // Tato logika závisí na tom, jak jsou klíčová slova organizována podle kategorie.
+    // Například, pokud jsou klíčová slova uložena jako objekt, kde klíče jsou názvy kategorií:
+    return keywords[categoryName] || [];
+  }
+  addClickEvent(selector, callback) {
+    const element = document.querySelector(selector);
+    if (element) {
+      element.addEventListener('click', callback);
+    }
+  }
+  scrollToSection(sectionId) {
+    const sectionElement = document.querySelector(sectionId);
+    if (sectionElement) {
+      const sectionTop = sectionElement.offsetTop;
+      window.scrollTo({ top: sectionTop, behavior: 'smooth' });
+    }
+  }
+
+  fetchCategorizedPageVisits() {
+    chrome.runtime.sendMessage({ type: 'getCategorizedPageVisits' }, (response) => {
+      const categorizedData = response.categorizedData;
+      const categoryPercentages = response.categoryPercentages;
+      this.updateUI(categorizedData, categoryPercentages);
+    });
+    
+  }
+  
+
+  updateUI(categorizedData, categoryPercentages) {
+    
+    // Zde doplňte kód pro zobrazení dat v popupu
+    this.displayCategorizedData(categorizedData.social);
+    this.updateProgressBar('#div-social', categoryPercentages.social, categorizedData.social);
+    this.updateProgressBar('#div-education', categoryPercentages.education, categorizedData.education);
+    this.updateProgressBar('#div-work', categoryPercentages.work, categorizedData.work);
+    this.updateProgressBar('#div-research', categoryPercentages.research, categorizedData.research);
+    this.updateProgressBar('#div-other', categoryPercentages.other, categorizedData.other);
+  }
+  updateProgressBar(progressBarId, percentage, categoryData) {
+    const progressBarDiv = document.querySelector(progressBarId);
+    progressBarDiv.style.width = `${percentage}%`;
+    
+    // Získat název kategorie
+    const categoryName = this.progressBarCategories[progressBarId] || 'Unknown';
+    
+    if (typeof percentage === 'number') {
+      progressBarDiv.innerHTML = `${categoryName}: ${percentage.toFixed(0)}%`; // zobrazit procentuální hodnotu v divu
+    } else {
+      progressBarDiv.innerHTML = `${categoryName}: none`;
+    }
+  
+    progressBarDiv.addEventListener('click', () => this.displayCategorizedData(categoryData, categoryName));
+    
+
+  }
+
+  
+  displayCategorizedData(categoryData, categoryName) {
+    const detailedDataContainer = document.querySelector('#detailed-data');
+    detailedDataContainer.innerHTML = ''; // Vyčistit obsah kontejneru
+
+    categoryData.forEach(visit => {
+      const detailedItem = document.createElement('div');
+      detailedItem.classList.add('detailed-item');
+  
+      const visitUrl = document.createElement('a');
+      visitUrl.href = visit.url;
+      visitUrl.textContent = visit.pageTitle || visit.url;
+      visitUrl.target = '_blank';
+  
+      const timeSpentInSeconds = visit.timeSpent / 1000;
+      let timeSpentDisplay;
+      
+      if (timeSpentInSeconds < 60) {
+        timeSpentDisplay = `${timeSpentInSeconds.toFixed(0)} sec.`;
+      } else if (timeSpentInSeconds < 3600) { // Méně než hodina
+        timeSpentDisplay = `${Math.floor(timeSpentInSeconds / 60)} min.`;
+      } else {
+        const hours = Math.floor(timeSpentInSeconds / 3600);
+        const minutes = Math.floor((timeSpentInSeconds % 3600) / 60);
+        timeSpentDisplay = `${hours}:${minutes < 10 ? '0' : ''}${minutes} hours`;
+      }
+      
+
+        const visitTimeSpent = document.createElement('p');
+        visitTimeSpent.textContent = 'Time spent: ';
+    
+        const timeSpan = document.createElement('span');
+        timeSpan.textContent = timeSpentDisplay;
+    
+        visitTimeSpent.appendChild(timeSpan);
+  
+      detailedItem.appendChild(visitUrl);
+      detailedItem.appendChild(visitTimeSpent);
+  
+      detailedDataContainer.appendChild(detailedItem);
+    });
+  }
+
+
+  displayKeywords() {
+    console.log("Starting displayKeywords");
+
+    const keywordsContainer = document.querySelector('#keywords-container');
+    keywordsContainer.innerHTML = ''; // Clear the container content
+
+    // Fetch keywords from the background script
+    chrome.runtime.sendMessage({ type: 'getKeywords' }, (response) => {
+      const keywords = response.keywords;
+
+      // Now you have the keywords, you can display them
+      this.displayKeywordsContent(keywords);
+    });
+  }
+  displayKeywordsContent(keywords) {
+    const keywordsDiv = document.createElement('div');
+    keywordsDiv.classList.add('keywords-div');
+
+    keywords.forEach(keyword => {
+      const keywordButton = document.createElement('button');
+      keywordButton.textContent = keyword;
+      keywordButton.addEventListener('click', () => {
+        this.removeKeyword(keyword);
+      });
+      keywordsDiv.appendChild(keywordButton);
+    });
+
+    const formDiv = this.createKeywordForm('Your Keywords');
+    formDiv.appendChild(keywordsDiv);
+
+    const keywordsContainer = document.querySelector('#keywords-container');
+    keywordsContainer.appendChild(formDiv);
+  }
+  createKeywordForm(categoryName) {
+    console.log("Starting createKeywordForm with category:", categoryName); // Kontrolní výpis
+  
+    const formDiv = document.createElement('div');
+    formDiv.classList.add('keyword-form-div');
+  
+    const heading = document.createElement('h2');
+    heading.textContent = categoryName;
+    formDiv.appendChild(heading);
+  
+    const form = document.createElement('form');
+    form.id = 'keyword-form';
+  
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'keywords';
+    input.placeholder = 'Enter keywords...';
+  
+    const submitButton = document.createElement('button');
+    submitButton.type = 'submit';
+    submitButton.textContent = 'Submit';
+  
+    form.appendChild(input);
+    form.appendChild(submitButton);
+  
+    console.log("Appending form to formDiv"); // Kontrolní výpis
+    formDiv.appendChild(form);
+  
+    return formDiv;
+  }
+addKeyword(keyword) {
+  chrome.runtime.sendMessage({ type: 'addKeyword', keyword }, (response) => {
+    if (response.success) {
+      console.log("Keyword added successfully");
+    } else {
+      console.error("Failed to add keyword");
+    }
+  });
+}
+removeKeyword(keyword) {
+  chrome.runtime.sendMessage({ type: 'removeKeyword', keyword }, (response) => {
+    if (response.success) {
+      console.log("Keyword removed successfully");
+      this.fetchKeywords(); // Update the displayed keywords
+    } else {
+      console.error("Failed to remove keyword");
+    }
+  });
+}
+  clearData() {
+    chrome.runtime.sendMessage({ type: 'clearAllData' }, (response) => {
+      if (response.message === 'Data cleared.') {
+        window.location.reload(); // Refresh popup after clearing data
+      }
+    });
+  }
+
+  openDonateLink() {
+    chrome.tabs.create({ url: 'https://www.paypal.com/donate/?hosted_button_id=3SXLYVB58ADJ2' });
+  }
+}
+const scrollToTopButton = document.getElementById("scrollToTop");
+
+// Funkce pro zobrazení tlačítka, když uživatel posune dolů
+window.onscroll = function() {
+  if (document.body.scrollTop > 1200 || document.documentElement.scrollTop > 300) {
+    scrollToTopButton.style.display = "block";
+  } else {
+    scrollToTopButton.style.display = "none";
+  }
+};
+
+// Funkce pro posunutí zpět nahoru
+function scrollToTop() {
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+// Připojení události kliknutí
+scrollToTopButton.addEventListener("click", scrollToTop);
+
+document.addEventListener('DOMContentLoaded', () => {
+  new PopupUI();
+});
+//popup.html
+</div>
+    <div class="data">
+      <div class="progress-bar">
+        <div id="div-social"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-education"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-work"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-research"></div>
+      </div>
+      <div class="progress-bar">
+        <div id="div-other"></div>
+      </div>
+      <div class="transparent"></div>
+    </div>
+    <div id="keywords-container"></div>
+    <div id="detailed-data">

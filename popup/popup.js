@@ -1,25 +1,5 @@
 class PopupUI {
   constructor() {
-    this.progressBarSocial = document.querySelector('#div-social');
-    this.progressBarEducation = document.querySelector('#div-education');
-    this.progressBarWork = document.querySelector('#div-work');
-    this.progressBarResearch= document.querySelector('#div-research');
-    this.progressBarOther = document.querySelector('#div-other');
-
-    this.progressBarSocial.addEventListener('click', () => this.scrollToSection('#detailed-data'));
-    this.progressBarEducation.addEventListener('click', () => this.scrollToSection('#detailed-data'));
-    this.progressBarWork.addEventListener('click', () => this.scrollToSection('#detailed-data'));
-    this.progressBarResearch.addEventListener('click', () => this.scrollToSection('#detailed-data'));
-    this.progressBarOther.addEventListener('click', () => this.scrollToSection('#detailed-data'));
-
-    this.clearDataButton = document.querySelector('#clear-data-button');
-    this.donateButton = document.querySelector('#donate-button');
-
-    this.clearDataButton.addEventListener('click', () => this.clearData());
-    this.donateButton.addEventListener('click', () => this.openDonateLink());
-
-    this.fetchCategorizedPageVisits();
-
     this.progressBarCategories = {
       '#div-social': 'Social',
       '#div-education': 'Education',
@@ -27,8 +7,33 @@ class PopupUI {
       '#div-research': 'Research',
       '#div-other': 'Other',
     };
-  }
 
+    // Iterace přes progress bar kategorie a přidání posluchačů
+    for (const selector in this.progressBarCategories) {
+      const progressBar = document.querySelector(selector);
+      if (progressBar) {
+        progressBar.addEventListener('click', () => this.scrollToSection('#detailed-data'));
+      }
+    }
+
+    this.addClickEvent('#clear-data-button', () => this.clearData());
+    this.addClickEvent('#donate-button', () => this.openDonateLink());
+
+    this.fetchCategorizedPageVisits();
+
+    // Poslat zprávu do backgroundu pro klíčová slova
+    chrome.runtime.sendMessage({ type: 'getKeywords' }, (response) => {
+      const keywords = response.keywords;
+      this.displayKeywords(keywords);
+    });
+  //dale pokracuje
+  }
+  addClickEvent(selector, callback) {
+    const element = document.querySelector(selector);
+    if (element) {
+      element.addEventListener('click', callback);
+    }
+  }
   scrollToSection(sectionId) {
     const sectionElement = document.querySelector(sectionId);
     if (sectionElement) {
@@ -46,6 +51,7 @@ class PopupUI {
   }
 
   updateUI(categorizedData, categoryPercentages) {
+    
     // Zde doplňte kód pro zobrazení dat v popupu
     this.displayCategorizedData(categorizedData.social);
     this.updateProgressBar('#div-social', categoryPercentages.social, categorizedData.social);
@@ -67,12 +73,16 @@ class PopupUI {
       progressBarDiv.innerHTML = `${categoryName}: none`;
     }
   
-    progressBarDiv.addEventListener('click', () => this.displayCategorizedData(categoryData));
+    progressBarDiv.addEventListener('click', () => this.displayCategorizedData(categoryData, categoryName));
+    
+
   }
-  displayCategorizedData(categoryData) {
+
+  
+  displayCategorizedData(categoryData, categoryName) {
     const detailedDataContainer = document.querySelector('#detailed-data');
     detailedDataContainer.innerHTML = ''; // Vyčistit obsah kontejneru
-  
+
     categoryData.forEach(visit => {
       const detailedItem = document.createElement('div');
       detailedItem.classList.add('detailed-item');
@@ -94,7 +104,8 @@ class PopupUI {
         const minutes = Math.floor((timeSpentInSeconds % 3600) / 60);
         timeSpentDisplay = `${hours}:${minutes < 10 ? '0' : ''}${minutes} hours`;
       }
-  
+      
+
         const visitTimeSpent = document.createElement('p');
         visitTimeSpent.textContent = 'Time spent: ';
     
@@ -111,6 +122,80 @@ class PopupUI {
   }
 
 
+  displayKeywords(keywords) {
+    console.log("Starting displayKeywords"); // Kontrolní výpis
+  
+    const keywordsContainer = document.querySelector('#keywords-container');
+    keywordsContainer.innerHTML = ''; // Vyčistit obsah kontejneru
+  
+    const formDiv = this.createKeywordForm('Your Keywords');
+    const keywordsDiv = document.createElement('div');
+    keywordsDiv.classList.add('keywords-div');
+  
+    keywords.forEach(keyword => {
+      const keywordButton = document.createElement('button');
+      keywordButton.textContent = keyword;
+      keywordButton.addEventListener('click', () => {
+        this.removeKeyword(keyword);
+      });
+      keywordsDiv.appendChild(keywordButton);
+    });
+  
+    formDiv.appendChild(keywordsDiv);
+  
+    console.log("Appending formDiv to keywordsContainer"); // Kontrolní výpis
+    keywordsContainer.appendChild(formDiv);
+  }
+  
+  createKeywordForm(categoryName) {
+    console.log("Starting createKeywordForm with category:", categoryName); // Kontrolní výpis
+  
+    const formDiv = document.createElement('div');
+    formDiv.classList.add('keyword-form-div');
+  
+    const heading = document.createElement('h2');
+    heading.textContent = categoryName;
+    formDiv.appendChild(heading);
+  
+    const form = document.createElement('form');
+    form.id = 'keyword-form';
+  
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'keywords';
+    input.placeholder = 'Enter keywords...';
+  
+    const submitButton = document.createElement('button');
+    submitButton.type = 'submit';
+    submitButton.textContent = 'Submit';
+  
+    form.appendChild(input);
+    form.appendChild(submitButton);
+  
+    console.log("Appending form to formDiv"); // Kontrolní výpis
+    formDiv.appendChild(form);
+  
+    return formDiv;
+  }
+addKeyword(keyword) {
+  chrome.runtime.sendMessage({ type: 'addKeyword', keyword }, (response) => {
+    if (response.success) {
+      console.log("Keyword added successfully");
+    } else {
+      console.error("Failed to add keyword");
+    }
+  });
+}
+removeKeyword(keyword) {
+  chrome.runtime.sendMessage({ type: 'removeKeyword', keyword }, (response) => {
+    if (response.success) {
+      console.log("Keyword removed successfully");
+      this.fetchKeywords(); // Update the displayed keywords
+    } else {
+      console.error("Failed to remove keyword");
+    }
+  });
+}
   clearData() {
     chrome.runtime.sendMessage({ type: 'clearAllData' }, (response) => {
       if (response.message === 'Data cleared.') {
