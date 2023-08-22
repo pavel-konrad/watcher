@@ -9,10 +9,10 @@ class PageVisitsTracker {
   init = () => {
     chrome.storage.local.get(['keywordToCategoryMap'], data => {
       this.keywordToCategoryMap = data.keywordToCategoryMap || {
-        social: ['facebook.com', 'twitter.com', 'instagram.com'],
-        education: ['coursera.org', 'udemy.com', 'khanacademy.org'],
-        work: ['slack', 'microsoft', 'mail', 'email'],
-        research: ['paper', 'scholar', 'article'],
+        social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
+        education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
+        work: ['slack', 'microsoft', 'mail', 'email', 'github'],
+        research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
         // Další klíčová slova a kategorie...
         
       };
@@ -126,10 +126,10 @@ handleTabUpdated = (tabId, changeInfo, tab) => {
   }
  handleGetKeywords = (sendResponse) => {
     const keywordToCategoryMap = {
-      social: ['facebook.com', 'twitter.com', 'instagram.com'],
-      education: ['coursera.org', 'udemy.com', 'khanacademy.org'],
-      work: ['slack', 'microsoft', 'mail', 'email'],
-      research: ['paper', 'scholar', 'article'],
+      social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
+        education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
+        work: ['slack', 'microsoft', 'mail', 'email', 'github'],
+        research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
       // Další klíčová slova a kategorie...
     };
     const keywords = Object.values(this.keywordToCategoryMap).flat();
@@ -204,10 +204,10 @@ async getCategorizedPageVisits() {
     const title = visit.pageTitle ? visit.pageTitle.toLowerCase() : ''; // Ověřte, zda pageTitle existuje
   
     const keywordToCategoryMap = {
-      social: ['facebook.com', 'twitter.com', 'instagram.com'],
-      education: ['coursera.org', 'udemy.com', 'khanacademy.org'],
-      work: ['slack', 'microsoft', 'mail', 'email'],
-      research: ['paper', 'scholar', 'article'],
+      social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
+      education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
+      work: ['slack', 'microsoft', 'mail', 'email', 'github', 'figma', 'adobe'],
+      research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
       // Další klíčová slova a kategorie...
     };
    
