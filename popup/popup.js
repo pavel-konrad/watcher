@@ -102,7 +102,7 @@ class PopupUI {
       } else {
         const hours = Math.floor(timeSpentInSeconds / 3600);
         const minutes = Math.floor((timeSpentInSeconds % 3600) / 60);
-        timeSpentDisplay = `${hours}:${minutes < 10 ? '0' : ''}${minutes} hours`;
+        timeSpentDisplay = `${hours} h ${minutes < 10 ? '0' : ''}${minutes} min`;
       }
       
 
