@@ -226,12 +226,16 @@ async getCategorizedPageVisits() {
     return 'other';
   }
   calculateCategoryPercentages(categorizedData) {
-    const totalVisits = Object.values(categorizedData).reduce((total, categoryData) => total + categoryData.length, 0);
+    const totalMilliseconds = Object.values(categorizedData)
+      .flat()
+      .reduce((total, visit) => total + visit.timeSpent, 0);
   
     const categoryPercentages = {};
     for (const category in categorizedData) {
-      const categoryData = categorizedData[category];
-      const categoryPercentage = (categoryData.length / totalVisits) * 100;
+      const categoryMilliseconds = categorizedData[category]
+        .reduce((total, visit) => total + visit.timeSpent, 0);
+  
+      const categoryPercentage = (categoryMilliseconds / totalMilliseconds) * 100;
       categoryPercentages[category] = categoryPercentage;
     }
   
