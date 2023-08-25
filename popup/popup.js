@@ -21,12 +21,7 @@ class PopupUI {
 
     this.fetchCategorizedPageVisits();
 
-    // Poslat zprávu do backgroundu pro klíčová slova
-    chrome.runtime.sendMessage({ type: 'getKeywords' }, (response) => {
-      const keywords = response.keywords;
-      this.displayKeywords(keywords);
-    });
-  //dale pokracuje
+   
   }
   addClickEvent(selector, callback) {
     const element = document.querySelector(selector);
@@ -102,7 +97,7 @@ class PopupUI {
       } else {
         const hours = Math.floor(timeSpentInSeconds / 3600);
         const minutes = Math.floor((timeSpentInSeconds % 3600) / 60);
-        timeSpentDisplay = `${hours} h ${minutes < 10 ? '0' : ''}${minutes} min`;
+        timeSpentDisplay = `${hours}h ${minutes < 10 ? '0' : ''}${minutes} min`;
       }
       
 
