@@ -1,230 +1,282 @@
 class PopupUI {
   constructor() {
-    this.progressBarCategories = {
-      '#div-social': 'Social',
-      '#div-education': 'Education',
-      '#div-work': 'Work',
-      '#div-research': 'Research',
-      '#div-other': 'Other',
-    };
-
-    // Iterace přes progress bar kategorie a přidání posluchačů
-    for (const selector in this.progressBarCategories) {
-      const progressBar = document.querySelector(selector);
-      if (progressBar) {
-        progressBar.addEventListener('click', () => this.scrollToSection('#detailed-data'));
-      }
-    }
-
-    this.addClickEvent('#clear-data-button', () => this.clearData());
-    this.addClickEvent('#donate-button', () => this.openDonateLink());
-
-    this.fetchCategorizedPageVisits();
-
-   
+      this.progressBarCategories = {
+          '#div-social': 'Social',
+          '#div-education': 'Education',
+          '#div-work': 'Work',
+          '#div-research': 'Research',
+          '#div-other': 'Other',
+      };
+      this.categoryTags = {};
+      this.init();
   }
+
+  init() {
+      this.loadTags();
+      this.initEventListeners();
+      this.fetchPageVisits();
+      this.trackPageVisits();
+  }
+
   addClickEvent(selector, callback) {
-    const element = document.querySelector(selector);
-    if (element) {
-      element.addEventListener('click', callback);
-    }
-  }
-  scrollToSection(sectionId) {
-    const sectionElement = document.querySelector(sectionId);
-    if (sectionElement) {
-      const sectionTop = sectionElement.offsetTop;
-      window.scrollTo({ top: sectionTop, behavior: 'smooth' });
-    }
+      const element = document.querySelector(selector);
+      if (element) {
+          element.addEventListener('click', callback);
+      }
   }
 
-  fetchCategorizedPageVisits() {
-    chrome.runtime.sendMessage({ type: 'getCategorizedPageVisits' }, (response) => {
-      const categorizedData = response.categorizedData;
-      const categoryPercentages = response.categoryPercentages;
-      this.updateUI(categorizedData, categoryPercentages);
-    });
+  initEventListeners() {
+      this.addClickEvent('#clear-data-button', () => this.clearData());
+      this.addClickEvent('#donate-button', () => this.openDonateLink());
+      this.addClickEvent('#send-tags-button', () => this.sendTagsToBackground());
+
+      for (const selector in this.progressBarCategories) {
+          this.addClickEvent(selector, () => {
+              this.scrollToSection('#detailed-data');
+              this.fetchNewTags(this.progressBarCategories[selector]);
+          });
+      }
+  }
+
+  loadTags() {
+      chrome.storage.sync.get('categoryTags', (result) => {
+          this.categoryTags = result.categoryTags || {
+              social: ['facebook', 'instagram', 'youtube'],
+              education: ['wikipedia', 'udemy'],
+              work: ['office'],
+              research: ['chatgpt', 'scholar'],
+              other: []
+          };
+          Object.keys(this.categoryTags).forEach(category => this.updateTagsDisplay(category));
+      });
+  }
+
+  sendTagsToBackground() {
+      chrome.storage.sync.set({ categoryTags: this.categoryTags }, () => {
+          if (chrome.runtime.lastError) {
+              console.error('Error sending tags:', chrome.runtime.lastError);
+          }
+      });
+  }
+
+  fetchNewTags(category) {
+      const tags = this.categoryTags[category.toLowerCase()] || [];
+      tags.forEach(tag => {
+          this.addKeywordToCategory(tag, category);
+      });
+      this.updateTagsDisplay(category);
+  }
+
+  scrollToSection(sectionId) {
+      document.querySelector(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  fetchPageVisits() {
+      chrome.runtime.sendMessage({ action: 'getPageVisits' }, (response) => {
+          if (response?.pageVisits) {
+              this.categorizePageVisits(response.pageVisits);
+          } else {
+              console.error('Error fetching page visits.');
+          }
+      });
+  }
+
+  categorizePageVisits(pageVisits) {
+      this.loadKeywordToCategoryMap((keywordToCategoryMap) => {
+          const categorizedData = { other: [] };
+          const totalTimeSpent = { other: 0 };
+
+          pageVisits.forEach(visit => {
+              let category = this.categorizePageVisit(visit.url, keywordToCategoryMap);
+              if (!category) {
+                  category = 'other';
+              }
+              if (!categorizedData[category]) {
+                  categorizedData[category] = [];
+                  totalTimeSpent[category] = 0;
+              }
+
+              const existingVisit = categorizedData[category].find(v => v.url === visit.url);
+              if (existingVisit) {
+                  existingVisit.timeSpent += visit.timeSpent;
+              } else {
+                  categorizedData[category].push({ 
+                      ...visit, 
+                      timeSpent: visit.timeSpent 
+                  });
+              }
+              totalTimeSpent[category] += visit.timeSpent;
+          });
+
+          Object.keys(categorizedData).forEach(category => 
+              categorizedData[category].sort((a, b) => b.timeSpent - a.timeSpent)
+          );
+
+          const categoryPercentages = this.calculateCategoryPercentages(totalTimeSpent, pageVisits);
+          this.updateUI(categorizedData, categoryPercentages);
+      });
+  }
+
+  loadKeywordToCategoryMap(callback) {
+      chrome.storage.local.get('keywordToCategoryMap', (data) => {
+          const keywordToCategoryMap = data.keywordToCategoryMap || {};
+          callback(keywordToCategoryMap);
+      });
+  }
+
+  categorizePageVisit(url, keywordToCategoryMap) {
+      return Object.entries(keywordToCategoryMap).find(([category, keywords]) =>
+          keywords.some(keyword => url.toLowerCase().includes(keyword.toLowerCase()))
+      )?.[0] || null;
+  }
+
+  trackPageVisits() {
+      chrome.runtime.sendMessage({ action: 'trackPageVisits' }, (response) => {
+          if (!response?.success) console.error('Error tracking visited pages.');
+      });
   }
 
   updateUI(categorizedData, categoryPercentages) {
-    
-    // Zde doplňte kód pro zobrazení dat v popupu
-    this.displayCategorizedData(categorizedData.social);
-    this.updateProgressBar('#div-social', categoryPercentages.social, categorizedData.social);
-    this.updateProgressBar('#div-education', categoryPercentages.education, categorizedData.education);
-    this.updateProgressBar('#div-work', categoryPercentages.work, categorizedData.work);
-    this.updateProgressBar('#div-research', categoryPercentages.research, categorizedData.research);
-    this.updateProgressBar('#div-other', categoryPercentages.other, categorizedData.other);
-  }
-  updateProgressBar(progressBarId, percentage, categoryData) {
-    const progressBarDiv = document.querySelector(progressBarId);
-    progressBarDiv.style.width = `${percentage}%`;
-    
-    // Získat název kategorie
-    const categoryName = this.progressBarCategories[progressBarId] || 'Unknown';
-    
-    if (typeof percentage === 'number') {
-      progressBarDiv.innerHTML = `${categoryName}: ${percentage.toFixed(0)}%`; // zobrazit procentuální hodnotu v divu
-    } else {
-      progressBarDiv.innerHTML = `${categoryName}: none`;
+    const totalTimeSpent = {};
+
+    for (const [selector, categoryName] of Object.entries(this.progressBarCategories)) {
+        const categoryKey = categoryName.toLowerCase();
+        const percentage = categoryPercentages[categoryKey] || 0;
+        this.updateProgressBar(selector, percentage, categorizedData[categoryKey] || []);
+
+        const categoryTimeSpent = categorizedData[categoryKey]?.reduce((total, visit) => total + visit.timeSpent, 0) || 0;
+        totalTimeSpent[categoryKey] = categoryTimeSpent;
     }
-  
-    progressBarDiv.addEventListener('click', () => this.displayCategorizedData(categoryData, categoryName));
-    
 
+    this.displayTotalTimeSpent(totalTimeSpent);
+}
+
+
+
+  updateProgressBar(selector, percentage, categoryData) {
+      const progressBarDiv = document.querySelector(selector);
+      if (progressBarDiv) {
+          progressBarDiv.style.width = `${percentage}%`;
+          progressBarDiv.innerHTML = `${this.progressBarCategories[selector]}: ${percentage.toFixed(0)}%`;
+          progressBarDiv.addEventListener('click', () => this.displayCategorizedData(categoryData, this.progressBarCategories[selector]));
+      }
   }
 
-  
+  displayTotalTimeSpent(totalTimeSpent) {
+      for (const [selector, categoryName] of Object.entries(this.progressBarCategories)) {
+          const categoryKey = categoryName.toLowerCase();
+          const totalSpent = this.formatTime(totalTimeSpent[categoryKey] || 0);
+          const totalDisplayElement = document.querySelector(`#total-time-${categoryKey}`);
+
+          if (totalDisplayElement) {
+              totalDisplayElement.innerHTML = `Total time: ${totalSpent}`;
+          }
+      }
+  }
+
   displayCategorizedData(categoryData, categoryName) {
     const detailedDataContainer = document.querySelector('#detailed-data');
-    detailedDataContainer.innerHTML = ''; // Vyčistit obsah kontejneru
-
-    categoryData.forEach(visit => {
-      const detailedItem = document.createElement('div');
-      detailedItem.classList.add('detailed-item');
-  
-      const visitUrl = document.createElement('a');
-      visitUrl.href = visit.url;
-      visitUrl.textContent = visit.pageTitle || visit.url;
-      visitUrl.target = '_blank';
-  
-      const timeSpentInSeconds = visit.timeSpent / 1000;
-      let timeSpentDisplay;
-      
-      if (timeSpentInSeconds < 60) {
-        timeSpentDisplay = `${timeSpentInSeconds.toFixed(0)} sec.`;
-      } else if (timeSpentInSeconds < 3600) { // Méně než hodina
-        timeSpentDisplay = `${Math.floor(timeSpentInSeconds / 60)} min.`;
-      } else {
-        const hours = Math.floor(timeSpentInSeconds / 3600);
-        const minutes = Math.floor((timeSpentInSeconds % 3600) / 60);
-        timeSpentDisplay = `${hours}h ${minutes < 10 ? '0' : ''}${minutes} min`;
-      }
-      
-
-        const visitTimeSpent = document.createElement('p');
-        visitTimeSpent.textContent = 'Time spent: ';
     
-        const timeSpan = document.createElement('span');
-        timeSpan.textContent = timeSpentDisplay;
+    const totalTime = categoryData.reduce((total, visit) => total + visit.timeSpent, 0);
+    detailedDataContainer.innerHTML = `<div class="total-time"><p>Total time for ${categoryName}: ${this.formatTime(totalTime)}</p></div>`;
     
-        visitTimeSpent.appendChild(timeSpan);
-  
-      detailedItem.appendChild(visitUrl);
-      detailedItem.appendChild(visitTimeSpent);
-  
-      detailedDataContainer.appendChild(detailedItem);
-    });
+    detailedDataContainer.innerHTML += categoryData.map(visit => `
+        <div class="detailed-item">
+            <a href="${visit.url}" target="_blank">${visit.pageTitle || visit.url}</a> - 
+            <br>Time spent: ${this.formatTime(visit.timeSpent)}
+        </div>
+    `).join('');
+}
+
+
+  formatTime(timeSpentInMilliseconds) {
+      const timeSpentInSeconds = timeSpentInMilliseconds / 1000;
+      return timeSpentInSeconds < 60 ? `${timeSpentInSeconds.toFixed(0)} sec.`
+          : timeSpentInSeconds < 3600 ? `${Math.floor(timeSpentInSeconds / 60)} min.`
+          : `${Math.floor(timeSpentInSeconds / 3600)}h ${Math.floor((timeSpentInSeconds % 3600) / 60)} min.`;
   }
 
+  calculateCategoryPercentages(totalTimeSpent, pageVisits) {
+      const totalSpentTime = pageVisits.reduce((sum, visit) => sum + visit.timeSpent, 0);
+      return Object.fromEntries(Object.entries(totalTimeSpent).map(([category, time]) => [category, (time / totalSpentTime) * 100]));
+  }
 
-  displayKeywords(keywords) {
-    console.log("Starting displayKeywords"); // Kontrolní výpis
-  
-    const keywordsContainer = document.querySelector('#keywords-container');
-    keywordsContainer.innerHTML = ''; // Vyčistit obsah kontejneru
-  
-    const formDiv = this.createKeywordForm('Your Keywords');
-    const keywordsDiv = document.createElement('div');
-    keywordsDiv.classList.add('keywords-div');
-  
-    keywords.forEach(keyword => {
-      const keywordButton = document.createElement('button');
-      keywordButton.textContent = keyword;
-      keywordButton.addEventListener('click', () => {
-        this.removeKeyword(keyword);
+  updateTagsDisplay(category) {
+      const tagsContainer = document.getElementById(`tags-${category}`);
+      if (tagsContainer) {
+          tagsContainer.innerHTML = this.categoryTags[category].map(tag => `
+              <span class="tag">${tag} <span class="remove-tag">✖</span></span>
+          `).join('') + `<button class="add-tag-button">+</button>`;
+
+          tagsContainer.querySelectorAll('.remove-tag').forEach((button, index) =>
+              button.addEventListener('click', () => this.removeTag(category, this.categoryTags[category][index])));
+
+          tagsContainer.querySelector('.add-tag-button').addEventListener('click', () => this.promptNewTag(category));
+      }
+  }
+
+  promptNewTag(category) {
+      const tagsContainer = document.getElementById(`tags-${category}`);
+      const input = document.createElement('input');
+      input.placeholder = 'Enter new tag';
+      input.style.display = 'inline-block';
+      const addButton = tagsContainer.querySelector('.add-tag-button');
+      tagsContainer.insertBefore(input, addButton);
+      input.focus();
+
+      input.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter' && input.value.trim()) {
+              this.addKeywordToCategory(input.value.trim(), category);
+              input.remove();
+          }
       });
-      keywordsDiv.appendChild(keywordButton);
-    });
-  
-    formDiv.appendChild(keywordsDiv);
-  
-    console.log("Appending formDiv to keywordsContainer"); // Kontrolní výpis
-    keywordsContainer.appendChild(formDiv);
+
+      input.addEventListener('blur', () => input.remove());
   }
-  
-  createKeywordForm(categoryName) {
-    console.log("Starting createKeywordForm with category:", categoryName); // Kontrolní výpis
-  
-    const formDiv = document.createElement('div');
-    formDiv.classList.add('keyword-form-div');
-  
-    const heading = document.createElement('h2');
-    heading.textContent = categoryName;
-    formDiv.appendChild(heading);
-  
-    const form = document.createElement('form');
-    form.id = 'keyword-form';
-  
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.name = 'keywords';
-    input.placeholder = 'Enter keywords...';
-  
-    const submitButton = document.createElement('button');
-    submitButton.type = 'submit';
-    submitButton.textContent = 'Submit';
-  
-    form.appendChild(input);
-    form.appendChild(submitButton);
-  
-    console.log("Appending form to formDiv"); // Kontrolní výpis
-    formDiv.appendChild(form);
-  
-    return formDiv;
-  }
-addKeyword(keyword) {
-  chrome.runtime.sendMessage({ type: 'addKeyword', keyword }, (response) => {
-    if (response.success) {
-      console.log("Keyword added successfully");
-    } else {
-      console.error("Failed to add keyword");
-    }
-  });
-}
-removeKeyword(keyword) {
-  chrome.runtime.sendMessage({ type: 'removeKeyword', keyword }, (response) => {
-    if (response.success) {
-      console.log("Keyword removed successfully");
-      this.fetchKeywords(); // Update the displayed keywords
-    } else {
-      console.error("Failed to remove keyword");
-    }
-  });
-}
-  clearData() {
-    chrome.runtime.sendMessage({ type: 'clearAllData' }, (response) => {
-      if (response.message === 'Data cleared.') {
-        window.location.reload(); // Refresh popup after clearing data
+
+  addKeywordToCategory(tag, category) {
+      const categoryKey = category.toLowerCase();
+      if (!this.categoryTags[categoryKey]) {
+          console.error(`Category "${categoryKey}" does not exist.`);
+          return;
       }
-    });
+      if (tag.trim() === '') {
+          console.error(`Tag cannot be empty.`);
+          return;
+      }
+      if (categoryKey !== 'other') {
+          if (!this.categoryTags[categoryKey].includes(tag)) {
+              this.categoryTags[categoryKey].push(tag);
+              this.updateTagsDisplay(categoryKey);
+              this.sendTagsToBackground();
+          }
+      } else {
+          console.error(`Cannot add tag to category "Other". Tag: ${tag}`);
+      }
+  }
+
+  removeTag(category, tag) {
+      const categoryKey = category.toLowerCase();
+      if (!this.categoryTags[categoryKey]) return;
+
+      this.categoryTags[categoryKey] = this.categoryTags[categoryKey].filter(t => t !== tag);
+      this.updateTagsDisplay(categoryKey);
+      this.sendTagsToBackground();
+  }
+
+  clearData() {
+      if (confirm('Are you sure you want to clear all data?')) {
+          chrome.storage.sync.clear(() => {
+              this.categoryTags = {};
+              this.updateUI({}, {});
+              alert('All data has been cleared.');
+          });
+      }
   }
 
   openDonateLink() {
-    chrome.tabs.create({ url: 'https://www.paypal.com/donate/?hosted_button_id=3SXLYVB58ADJ2' });
+      window.open('https://www.donate-link.com', '_blank');
   }
 }
-const scrollToTopButton = document.getElementById("scrollToTop");
 
-// Funkce pro zobrazení tlačítka, když uživatel posune dolů
-window.onscroll = function() {
-  if (document.body.scrollTop > 1200 || document.documentElement.scrollTop > 300) {
-    scrollToTopButton.style.display = "block";
-  } else {
-    scrollToTopButton.style.display = "none";
-  }
-};
-
-// Funkce pro posunutí zpět nahoru
-function scrollToTop() {
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-}
-
-// Připojení události kliknutí
-scrollToTopButton.addEventListener("click", scrollToTop);
-
-document.addEventListener('DOMContentLoaded', () => {
-  new PopupUI();
-});
+const popupUI = new PopupUI();

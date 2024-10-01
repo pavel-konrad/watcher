@@ -1,248 +1,187 @@
 class PageVisitsTracker {
-  
   constructor() {
-    this.activeTabId = null;
-    this.activeStartTime = null;
-    this.init();
+      this.activeTabId = null;
+      this.activeStartTime = null;
+      this.keywordToCategoryMap = {};
+      this.categoryTags = {};
+      this.currentlyTrackingUrls = new Set();
+      this.init();
   }
 
-  init = () => {
-    chrome.storage.local.get(['keywordToCategoryMap'], data => {
-      this.keywordToCategoryMap = data.keywordToCategoryMap || {
-        social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
-        education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
-        work: ['slack', 'microsoft', 'mail', 'email', 'github'],
-        research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
-        // Další klíčová slova a kategorie...
-        
-      };
-      
-    });
-    
-    chrome.tabs.onActivated.addListener(this.handleTabActivated);
-    chrome.tabs.onUpdated.addListener(this.handleTabUpdated);
-
-    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      if (request.type === 'getKeywords') {
-        this.handleGetKeywords(sendResponse);
-        return true;
-      } else if (request.type === 'savePageVisitData') {
-        this.handleSavePageVisitData(request, sendResponse);
-        return true;
-      } else if (request.type === 'getCategorizedPageVisits') {
-        this.handleGetCategorizedPageVisits(sendResponse);
-        return true;
-      } else if (request.type === 'clearAllData') {
-        this.clearAllData(success => {
-          if (success) {
-            sendResponse({ message: 'Data cleared.' });
-          } else {
-            sendResponse({ message: 'Failed to clear data.' });
-          }
-        });
-        return true;
-      }
-    });
+  init() {
+      this.loadKeywordToCategoryMap();
+      this.loadCategoryTags();
+      this.setupListeners();
   }
-  getKeywordsByCategory(category) {
-    return this.keywordToCategoryMap[category] || [];
-  }
-  
 
-  removeKeywordFromCategory(keyword, category) {
-    const keywords = this.keywordToCategoryMap[category];
-    const index = keywords.indexOf(keyword);
-    if (index > -1) {
-      keywords.splice(index, 1);
-      chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap }, () => {
-        console.log(`Keyword ${keyword} removed from category ${category}`);
+  setupListeners() {
+      chrome.tabs.onActivated.addListener(this.handleTabActivated.bind(this));
+      chrome.tabs.onUpdated.addListener(this.handleTabUpdated.bind(this));
+      chrome.runtime.onMessage.addListener(this.handleMessage.bind(this));
+      chrome.storage.onChanged.addListener(this.handleStorageChange.bind(this));
+  }
+
+  loadKeywordToCategoryMap() {
+      chrome.storage.local.get('keywordToCategoryMap', (data) => {
+          this.keywordToCategoryMap = data.keywordToCategoryMap || {};
       });
+  }
+
+  loadCategoryTags() {
+    chrome.storage.sync.get('categoryTags', (data) => {
+        if (!data.categoryTags || Object.keys(data.categoryTags).length === 0) {
+            this.categoryTags = {
+              social: ['facebook', 'instagram', 'youtube'],
+              education: ['wikipedia', 'udemy'],
+              work: ['office'],
+              research: ['chatgpt', 'scholar'],
+              other: []
+            };
+            chrome.storage.sync.set({ categoryTags: this.categoryTags });
+        } else {
+            this.categoryTags = data.categoryTags;
+        }
+        this.updateKeywordToCategoryMap();
+
+        chrome.storage.local.get('pageVisits', (result) => {
+            if (!result.pageVisits || result.pageVisits.length === 0) {
+                this.resetData();
+            }
+        });
+    });
+}
+
+  resetData() {
+      this.categoryTags = {
+          social: [],
+          education: [],
+          work: [],
+          research: [],
+          other: []
+      };
+      this.keywordToCategoryMap = {};
+      chrome.storage.local.set({ pageVisits: [] });
+      this.updateKeywordToCategoryMap();
+  }
+
+  updateKeywordToCategoryMap() {
+      Object.entries(this.categoryTags).forEach(([category, keywords]) => {
+          this.keywordToCategoryMap[category] = keywords;
+      });
+      chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap });
+  }
+
+  handleMessage(message, sender, sendResponse) {
+      if (message.action === 'trackPageVisits') {
+          this.trackActiveTab();
+          sendResponse({ success: true });
+      } else if (message.action === 'getPageVisits') {
+          this.getPageVisits(sendResponse);
+      } else if (message.action === 'clearData') {
+          this.clearData();
+          sendResponse({ success: true });
+      } else if (message.action === 'clearPageVisits') {
+          this.clearPageVisits(sendResponse);
+      }
       return true;
-    }
-    console.log(`Keyword ${keyword} not found in category ${category}`);
-    return false;
-  }
-  addKeywordToCategory(keyword, category) {
-    this.keywordToCategoryMap[category].push(keyword);
-    chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap }, () => {
-      console.log(`Keyword ${keyword} added to category ${category}`);
-    });
-    return true;
-  }
-  handleTabActivated = (activeInfo) => {
-  if (this.activeTabId !== null) {
-    const endTime = new Date().getTime();
-    const timeSpent = endTime - this.activeStartTime;
-
-    if (typeof this.activeTabId === 'number') {
-      chrome.tabs.get(this.activeTabId, (tab) => {
-        if (chrome.runtime.lastError || !tab || !tab.url || tab.url.startsWith('chrome://')) {
-          console.warn(`Tab ${this.activeTabId} not found, or is a chrome URL, or no URL property:`, chrome.runtime.lastError);
-          return; // V případě chyby, chrome URL nebo chybějící URL se zbytek kódu neprovede
-        }
-        this.savePageVisitData(null, tab.url, timeSpent, tab.title);
-      });
-    }
   }
 
-  this.activeTabId = activeInfo.tabId;
-  this.activeStartTime = new Date().getTime();
-};
-
-handleTabUpdated = (tabId, changeInfo, tab) => {
-  if (tabId === this.activeTabId && changeInfo.status === 'complete') {
-    this.activeStartTime = new Date().getTime();
+  handleTabActivated(activeInfo) {
+      this.trackActiveTab();
+      this.activeTabId = activeInfo.tabId;
+      this.activeStartTime = Date.now();
   }
-};
-  clearAllData(callback) {
-    chrome.storage.local.remove(['pageVisits'], () => {
-      if (chrome.runtime.lastError) {
-        console.error('Chyba při mazání dat:', chrome.runtime.lastError);
-        callback(false);
-      } else {
-        console.log('Všechna data byla vymazána.');
-        callback(true);
+
+  handleTabUpdated(tabId, changeInfo, tab) {
+      if (tab.active && changeInfo.url) {
+          this.trackActiveTab();
+          this.activeTabId = tabId;
+          this.activeStartTime = Date.now();
       }
-    });
   }
 
-  handleSavePageVisitData(request, sendResponse) {
-    const url = request.url;
-    const timeSpent = request.timeSpent;
-    const pageTitle = request.pageTitle;
-
-    this.savePageVisitData(null, url, timeSpent, pageTitle); // Null jako IP adresa
-    sendResponse({ message: 'Data was stored.' });
-  }
-
-  handleGetCategorizedPageVisits(sendResponse) {
-    this.getCategorizedPageVisits()
-      .then(({ categorizedData, categoryPercentages }) => {
-        sendResponse({ categorizedData, categoryPercentages });
-      })
-      .catch(error => {
-        console.error('Error getting category data', error);
-      });
-  }
- handleGetKeywords = (sendResponse) => {
-    const keywordToCategoryMap = {
-      social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
-        education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
-        work: ['slack', 'microsoft', 'mail', 'email', 'github'],
-        research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
-      // Další klíčová slova a kategorie...
-    };
-    const keywords = Object.values(this.keywordToCategoryMap).flat();
-  sendResponse({ keywords: keywords });
-  
-};
-  
-  getUserIpAddress() {
-    return fetch('https://api.ipify.org?format=json')
-      .then(response => response.json())
-      .then(data => data.ip);
-  }
-
-  savePageVisitData(ipAddress, url, timeSpent, pageTitle) {
-    if (!url || !timeSpent || !pageTitle) {
-      console.log('Missing data, not saving:', { ipAddress, url, timeSpent, pageTitle });
-      return;
-    }
-  
-    chrome.storage.local.get({ pageVisits: [] }, data => {
-      const pageVisits = data.pageVisits;
-  
-      // Najděte existující záznam s touto URL
-      const existingVisitIndex = pageVisits.findIndex(visit => visit.url === url);
-  
-      if (existingVisitIndex > -1) {
-        // Pokud záznam existuje, aktualizujte čas strávený
-        pageVisits[existingVisitIndex].timeSpent += timeSpent;
-      } else {
-        // Pokud záznam neexistuje, přidejte nový záznam
-        pageVisits.unshift({
-          ipAddress: ipAddress,
-          url: url,
-          timeSpent: timeSpent,
-          pageTitle: pageTitle,
-        });
+  trackActiveTab() {
+      if (this.activeTabId && this.activeStartTime) {
+          chrome.tabs.get(this.activeTabId, (tab) => {
+              if (tab?.url) {
+                  const timeSpent = Date.now() - this.activeStartTime;
+                  this.savePageVisit(tab.url, tab.title, timeSpent);
+              }
+          });
       }
-      pageVisits.sort((a, b) => b.timeSpent - a.timeSpent);
-      chrome.storage.local.set({ pageVisits: pageVisits }, () => {
-        console.log('Page visits stored:', pageVisits);
-      });
-    });
   }
 
-async getCategorizedPageVisits() {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(['pageVisits'], data => {
-      const pageVisits = Object.values(data.pageVisits || {});
-
-      const categorizedData = {
-        social: [],
-        education: [],
-        work: [],
-        research: [],
-        other: [],
-      };
-
-      pageVisits.forEach(visit => {
-        const category = this.categorizePageVisit(visit);
-        categorizedData[category].push(visit);
+  savePageVisit(url, title, timeSpent) {
+      const visitData = { url, pageTitle: title, timeSpent };
+      chrome.storage.local.get('pageVisits', (result) => {
+          const pageVisits = Array.isArray(result.pageVisits) ? result.pageVisits : [];
+          const category = this.getCategoryForUrl(url);
+          visitData.category = category || 'other';
+          pageVisits.push(visitData);
+          chrome.storage.local.set({ pageVisits });
       });
+  }
 
-      const categoryPercentages = this.calculateCategoryPercentages(categorizedData);
-
-      resolve({ categorizedData, categoryPercentages });
-    });
-  });
-}
-
-  categorizePageVisit(visit) {
-    const url = visit.url || ''; // Ověřte, zda url existuje
-    const title = visit.pageTitle ? visit.pageTitle.toLowerCase() : ''; // Ověřte, zda pageTitle existuje
-  
-    const keywordToCategoryMap = {
-      social: ['facebook.com', 'twitter.com', 'instagram.com', 'youtube'],
-      education: ['coursera.org', 'udemy.com', 'khanacademy.org', 'university', 'school', 'curiculum'],
-      work: ['slack', 'microsoft', 'mail', 'email', 'github', 'figma', 'adobe'],
-      research: ['paper', 'scholar', 'article', 'research', 'academic', 'science', 'journal'],
-      // Další klíčová slova a kategorie...
-    };
-   
-
-    for (const category in keywordToCategoryMap) {
-      const keywords = keywordToCategoryMap[category];
-      if (keywords) { // Ověřte, zda klíčová slova existují
-        for (const keyword of keywords) {
-          if (url.includes(keyword) || title.includes(keyword)) {
-            return category;
+  getCategoryForUrl(url) {
+      for (const [category, keywords] of Object.entries(this.keywordToCategoryMap)) {
+          if (keywords.some(keyword => url.includes(keyword))) {
+              return category;
           }
-        }
       }
-    }
-      
-    return 'other';
+      return null;
   }
-  calculateCategoryPercentages(categorizedData) {
-    const totalMilliseconds = Object.values(categorizedData)
-      .flat()
-      .reduce((total, visit) => total + visit.timeSpent, 0);
-  
-    const categoryPercentages = {};
-    for (const category in categorizedData) {
-      const categoryMilliseconds = categorizedData[category]
-        .reduce((total, visit) => total + visit.timeSpent, 0);
-  
-      const categoryPercentage = (categoryMilliseconds / totalMilliseconds) * 100;
-      categoryPercentages[category] = categoryPercentage;
-    }
-  
-    return categoryPercentages;
-  }
-  
+
+  getPageVisits(sendResponse) {
+    chrome.storage.local.get('pageVisits', (result) => {
+        const visits = result.pageVisits || [];
+        const aggregatedVisits = {};
+
+        visits.forEach(visit => {
+            if (!aggregatedVisits[visit.url]) {
+                aggregatedVisits[visit.url] = {
+                    pageTitle: visit.pageTitle,
+                    timeSpent: 0
+                };
+            }
+            aggregatedVisits[visit.url].timeSpent += visit.timeSpent;
+        });
+
+        const aggregatedVisitsArray = Object.entries(aggregatedVisits).map(([url, data]) => ({
+            url,
+            pageTitle: data.pageTitle,
+            timeSpent: data.timeSpent
+        }));
+
+        aggregatedVisitsArray.sort((a, b) => b.timeSpent - a.timeSpent);
+        sendResponse({ pageVisits: aggregatedVisitsArray });
+    });
 }
 
+  handleStorageChange(changes, areaName) {
+      if (areaName === 'sync') {
+          if (changes.categoryTags) {
+              this.categoryTags = changes.categoryTags.newValue;
+              this.updateKeywordToCategoryMap();
+          }
+      }
+  }
+
+  clearData() {
+      chrome.storage.sync.clear(() => {
+          chrome.storage.local.clear(() => {
+              this.resetData();
+              this.loadCategoryTags();
+              this.trackActiveTab();
+              alert('All data has been cleared.');
+          });
+      });
+  }
+
+  clearPageVisits(sendResponse) {
+      chrome.storage.local.set({ pageVisits: [] }, () => {
+          sendResponse({ success: true });
+      });
+  }
+}
 
 new PageVisitsTracker();
