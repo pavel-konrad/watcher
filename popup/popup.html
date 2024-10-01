@@ -1,62 +1,110 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="cs">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@200;300;400;600&family=Montserrat:wght@100;200;300;400;500;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <title>Watcher</title>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@200;300;400;600&family=Montserrat:wght@100;200;300;400;500;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <title>Watcher</title>
 </head>
 <body>
-  <div class="grid-container">
-    <div class="hero">
-      <div class="hero-item-1">
-        <a href="" class="hero-text"><h1>Watcher</h1></a>
-      </div>
-      <div class="logo"></div>
-        
-        <h2>Your personal procrastination killer</h2>
-      
-      <button id="clear-data-button">Clear Data</button>
-    </div>
-    <div class="data">
-      <div class="progress-bar">
-        <div id="div-social"></div>
-      </div>
-      <div class="progress-bar">
-        <div id="div-education"></div>
-      </div>
-      <div class="progress-bar">
-        <div id="div-work"></div>
-      </div>
-      <div class="progress-bar">
-        <div id="div-research"></div>
-      </div>
-      <div class="progress-bar">
-        <div id="div-other"></div>
-      </div>
-      <div class="transparent"></div>
-    </div>
-    <div id="keywords-container"></div>
-    <div id="detailed-data">
-      <!-- Your detailed data content here -->
-    </div>
-    <button id="scrollToTop">↑</button>
-    <div class="footer">
-      <p>Watcher is free! I don't collect your data. It's designed for quick stats about your internet usage time. If you enjoy using Watcher, please consider donating. Your honesty would be greatly appreciated.</p>
-      <button id="donate-button">Donate</button>
-    </div>
-    <div class="author">
-      <p>Created by Pavel Konrad</p>
-      <a href="https://www.instagram.com/pavelk0nrad/" target="_blank"><img src="../images/instagram.png" alt="instagram"></a>
-      <a href="https://github.com/pavelk0nrad" target="_blank"><img src="../images/github.png" alt="github"></a>
-      <a href="https://www.linkedin.com/in/pavelk0nrad/" target="_blank"><img src="../images/linkedin.png" alt="linkedin"></a>
-  </div>
-</div>
+    <div class="grid-container">
+        <!-- Hero section -->
+        <div class="hero">
+            <div class="hero-item-1">
+                <a href="#" class="hero-text">
+                    <h1>Watcher</h1>
+                </a>
+            </div>
+            <div class="logo"></div>
+            <h2>Your personal procrastination killer</h2>
+            <button id="clear-data-button">Clear Data</button>
+        </div>
 
-  <script src="./popup.js"></script>
+        <!-- Data section -->
+        <div class="data">
+            <!-- Kategorizace -->
+            <div class="category">
+                <div class="progress-bar">
+                    <div id="div-social"></div>
+                </div>
+                <div class="tags-list" id="tags-social">
+                    <span class="tag">Social <span class="remove-tag">✖</span></span>
+                    <input type="text" id="input-tag-social" placeholder="Add a tag..." />
+                    <button id="add-tag-social" class="add-tag-button">+</button>
+                </div>
+            </div>
+
+            <div class="category">
+                <div class="progress-bar">
+                    <div id="div-education"></div>
+                </div>
+                <div class="tags-list" id="tags-education">
+                    <span class="tag">Education <span class="remove-tag">✖</span></span>
+                    <input type="text" id="input-tag-education" placeholder="Add a tag..." />
+                    <button id="add-tag-education" class="add-tag-button">+</button>
+                </div>
+            </div>
+
+            <div class="category">
+                <div class="progress-bar">
+                    <div id="div-work"></div>
+                </div>
+                <div class="tags-list" id="tags-work">
+                    <span class="tag">Work <span class="remove-tag">✖</span></span>
+                    <input type="text" id="input-tag-work" placeholder="Add a tag..." />
+                    <button id="add-tag-work" class="add-tag-button">+</button>
+                </div>
+            </div>
+
+            <div class="category">
+                <div class="progress-bar">
+                    <div id="div-research"></div>
+                </div>
+                <div class="tags-list" id="tags-research">
+                    <span class="tag">Research <span class="remove-tag">✖</span></span>
+                    <input type="text" id="input-tag-research" placeholder="Add a tag..." />
+                    <button id="add-tag-research" class="add-tag-button">+</button>
+                </div>
+            </div>
+
+            <div class="category">
+                <div class="progress-bar">
+                    <div id="div-other"></div>
+                </div>
+               
+        </div>
+
+        <!-- Detailed data section -->
+        <div id="detailed-data">
+          <div id="total-time-display"></div>
+
+        </div>
+        <button id="scrollToTop">↑</button>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Watcher is free! Watcher does not collect your data. It’s designed to provide quick stats about your internet usage time. If you enjoy using Watcher, please consider donating. Your honesty would be greatly appreciated.</p>
+            <button id="donate-button">Donate</button>
+        </div>
+
+        <!-- Author section -->
+        <div class="author">
+            <p>Created by Pavel Konrad</p>
+            <a href="https://www.instagram.com/pavelk0nrad/" target="_blank">
+                <img src="../images/instagram.png" alt="Instagram">
+            </a>
+            <a href="https://github.com/pavelk0nrad" target="_blank">
+                <img src="../images/github.png" alt="GitHub">
+            </a>
+            <a href="https://www.linkedin.com/in/pavelk0nrad/" target="_blank">
+                <img src="../images/linkedin.png" alt="LinkedIn">
+            </a>
+        </div>
+    </div>
+
+    <script src="./popup.js"></script>
 </body>
 </html>
