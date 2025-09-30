@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Watcher",
-  "version": "2.1",
+  "version": "3.0",
   "description": "Your personal procrastination killer",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
  
   "icons": {

@@ -1,42 +1,57 @@
-# Watcher – Chrome Extension Prototype
 
+# Watcher – Chrome Extension
 
-**Watcher** is an experimental **Chrome extension** created as part of a "vibe coding" session.  
-The idea was to explore how quickly a functional prototype can be built using a mix of  
-AI-assisted prompting and manual coding.
-
----
-
-## Project Goals
-- Learn the basics of **Chrome extension development** (manifest, background scripts, UI).  
-- Experiment with **AI-assisted coding workflows**.  
-- Prototype a tool that monitors and organizes user activity.  
+**Watcher** is a lightweight **Chrome extension** that helps you organize your browsing history.
+The main feature is the ability to create **custom categories** and assign visited pages to them,
+making it easier to keep track of your online activity.
 
 ---
 
 ## Features
-- Basic Chrome Extension setup with a `manifest.json`.  
-- Background script handling simple events.  
-- Minimal UI for testing extension logic.  
-- Initial data handling for categorization.  
+
+- Organize browsing history with **custom categories**.
+- Background script handles monitoring and data flow.
+- Minimal and intuitive UI for quick interaction.
+- Stores categorized entries locally for easy reference.
 
 ---
 
 ## Purpose
-This project is not a production-ready extension.  
-It is kept as an **early experiment** to document the learning process, the potential of  
-AI-assisted prototyping, and to show how quick iteration can produce tangible results.
+
+Watcher started as a prototyping exercise (AI-assisted + manual coding) and has evolved into a
+**fully working Chrome extension**. The project now serves both as a productivity tool and as a
+showcase of Chrome extension development skills.
 
 ---
 
-## Future Work
-- Expand data handling and categorization.  
-- Create a polished UI for user interaction.  
-- Publish a working version to the Chrome Web Store.  
+## Installation
+
+1. Clone or download this repository.
+2. Open `chrome://extensions/` in Chrome.
+3. Enable **Developer Mode**.
+4. Click **Load unpacked** and select the project folder.
 
 ---
 
-## Notes
-This repository is intentionally left as an **open prototype**.  
-It represents a hands-on exploration of coding with partial AI assistance ("vibe coding"),  
-combined with traditional problem-solving and debugging.
+
+## Change Log
+
+### v3.0.0 – Current Release
+
+- Improved functionality and overall stability.
+- Fixed a bug where data did not load correctly when the popup was hidden.
+
+### v2.1.0 – Maintenance Release
+
+- Minor improvements and optimizations.
+- Bug fixes in category handling.
+
+### v2.0.0 – Feature Expansion
+
+- Introduced local storage for custom categories.
+- Enhanced background script functionality.
+
+### v1.0.0 – Initial Release
+
+- Core functionality: add custom categories to organize browsing history.
+- Basic UI for managing categories and browsing data.

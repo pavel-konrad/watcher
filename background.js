@@ -1,10 +1,10 @@
 class PageVisitsTracker {
   constructor() {
-      this.activeTabId = null;
-      this.activeStartTime = null;
+      this.currentTab = null;
+      this.startTime = null;
       this.keywordToCategoryMap = {};
       this.categoryTags = {};
-      this.currentlyTrackingUrls = new Set();
+      this.isTracking = false;
       this.init();
   }
 
@@ -12,11 +12,14 @@ class PageVisitsTracker {
       this.loadKeywordToCategoryMap();
       this.loadCategoryTags();
       this.setupListeners();
+      this.startTrackingActiveTab();
   }
 
   setupListeners() {
       chrome.tabs.onActivated.addListener(this.handleTabActivated.bind(this));
       chrome.tabs.onUpdated.addListener(this.handleTabUpdated.bind(this));
+      chrome.tabs.onRemoved.addListener(this.handleTabRemoved.bind(this));
+      chrome.windows.onFocusChanged.addListener(this.handleWindowFocusChanged.bind(this));
       chrome.runtime.onMessage.addListener(this.handleMessage.bind(this));
       chrome.storage.onChanged.addListener(this.handleStorageChange.bind(this));
   }
@@ -52,28 +55,34 @@ class PageVisitsTracker {
 }
 
   resetData() {
+      // Necháme výchozí keywords
       this.categoryTags = {
-          social: [],
-          education: [],
-          work: [],
-          research: [],
+          social: ['facebook', 'instagram', 'youtube'],
+          education: ['wikipedia', 'udemy'],
+          work: ['office'],
+          research: ['chatgpt', 'scholar'],
           other: []
       };
+      chrome.storage.sync.set({ categoryTags: this.categoryTags });
       this.keywordToCategoryMap = {};
       chrome.storage.local.set({ pageVisits: [] });
       this.updateKeywordToCategoryMap();
   }
 
   updateKeywordToCategoryMap() {
-      Object.entries(this.categoryTags).forEach(([category, keywords]) => {
-          this.keywordToCategoryMap[category] = keywords;
-      });
-      chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap });
+      if (this.categoryTags && typeof this.categoryTags === 'object') {
+          Object.entries(this.categoryTags).forEach(([category, keywords]) => {
+              this.keywordToCategoryMap[category] = keywords;
+          });
+          chrome.storage.local.set({ keywordToCategoryMap: this.keywordToCategoryMap });
+      } else {
+          console.warn('categoryTags is null or undefined, skipping updateKeywordToCategoryMap');
+      }
   }
 
   handleMessage(message, sender, sendResponse) {
       if (message.action === 'trackPageVisits') {
-          this.trackActiveTab();
+          this.startTrackingActiveTab();
           sendResponse({ success: true });
       } else if (message.action === 'getPageVisits') {
           this.getPageVisits(sendResponse);
@@ -87,36 +96,99 @@ class PageVisitsTracker {
   }
 
   handleTabActivated(activeInfo) {
-      this.trackActiveTab();
-      this.activeTabId = activeInfo.tabId;
-      this.activeStartTime = Date.now();
+      this.saveCurrentVisit();
+      this.startTracking(activeInfo.tabId);
   }
 
   handleTabUpdated(tabId, changeInfo, tab) {
       if (tab.active && changeInfo.url) {
-          this.trackActiveTab();
-          this.activeTabId = tabId;
-          this.activeStartTime = Date.now();
+          this.saveCurrentVisit();
+          this.startTracking(tabId);
       }
   }
 
-  trackActiveTab() {
-      if (this.activeTabId && this.activeStartTime) {
-          chrome.tabs.get(this.activeTabId, (tab) => {
-              if (tab?.url) {
-                  const timeSpent = Date.now() - this.activeStartTime;
-                  this.savePageVisit(tab.url, tab.title, timeSpent);
+  handleTabRemoved(tabId, removeInfo) {
+      if (tabId === this.currentTab?.id) {
+          this.saveCurrentVisit();
+          this.stopTracking();
+      }
+  }
+
+  startTracking(tabId) {
+      chrome.tabs.get(tabId, (tab) => {
+          if (tab && this.isValidUrl(tab.url)) {
+              this.currentTab = tab;
+              this.startTime = Date.now();
+              this.isTracking = true;
+          } else {
+              this.stopTracking();
+          }
+      });
+  }
+
+  stopTracking() {
+      this.currentTab = null;
+      this.startTime = null;
+      this.isTracking = false;
+  }
+
+  saveCurrentVisit() {
+      if (!this.isTracking || !this.currentTab || !this.startTime) {
+          return;
+      }
+
+      const timeSpent = Date.now() - this.startTime;
+      if (timeSpent > 500) {
+          this.savePageVisit(this.currentTab.url, this.currentTab.title, timeSpent);
+      }
+  }
+
+  handleWindowFocusChanged(windowId) {
+      if (windowId === chrome.windows.WINDOW_ID_NONE) {
+          this.saveCurrentVisit();
+          this.stopTracking();
+      } else {
+          chrome.tabs.query({ active: true, windowId: windowId }, (tabs) => {
+              if (tabs.length > 0) {
+                  this.saveCurrentVisit();
+                  this.startTracking(tabs[0].id);
               }
           });
       }
   }
 
+
+  isValidUrl(url) {
+      const invalidProtocols = ['chrome:', 'chrome-extension:', 'about:', 'data:', 'file:', 'moz-extension:'];
+      const invalidPages = ['chrome://newtab/', 'about:blank'];
+      
+      if (!url || typeof url !== 'string') {
+          return false;
+      }
+      
+      const lowerUrl = url.toLowerCase();
+      const hasInvalidProtocol = invalidProtocols.some(protocol => lowerUrl.startsWith(protocol));
+      const isInvalidPage = invalidPages.some(page => lowerUrl === page);
+      
+      if (hasInvalidProtocol || isInvalidPage) {
+          return false;
+      }
+      
+      return true;
+  }
+
   savePageVisit(url, title, timeSpent) {
+      if (!title || title.trim() === '') {
+          return;
+      }
+      
       const visitData = { url, pageTitle: title, timeSpent };
+      
       chrome.storage.local.get('pageVisits', (result) => {
           const pageVisits = Array.isArray(result.pageVisits) ? result.pageVisits : [];
           const category = this.getCategoryForUrl(url);
           visitData.category = category || 'other';
+          
           pageVisits.push(visitData);
           chrome.storage.local.set({ pageVisits });
       });
@@ -136,18 +208,29 @@ class PageVisitsTracker {
         const visits = result.pageVisits || [];
         const aggregatedVisits = {};
 
-        visits.forEach(visit => {
-            if (!aggregatedVisits[visit.url]) {
-                aggregatedVisits[visit.url] = {
+        visits.forEach((visit) => {
+            if (!visit.pageTitle || visit.pageTitle.trim() === '') {
+                return;
+            }
+            
+            const key = visit.pageTitle;
+            
+            if (!aggregatedVisits[key]) {
+                aggregatedVisits[key] = {
+                    url: visit.url,
                     pageTitle: visit.pageTitle,
                     timeSpent: 0
                 };
+            } else {
+                if (visit.url) {
+                    aggregatedVisits[key].url = visit.url;
+                }
             }
-            aggregatedVisits[visit.url].timeSpent += visit.timeSpent;
+            aggregatedVisits[key].timeSpent += visit.timeSpent;
         });
 
-        const aggregatedVisitsArray = Object.entries(aggregatedVisits).map(([url, data]) => ({
-            url,
+        const aggregatedVisitsArray = Object.entries(aggregatedVisits).map(([title, data]) => ({
+            url: data.url,
             pageTitle: data.pageTitle,
             timeSpent: data.timeSpent
         }));
@@ -159,7 +242,7 @@ class PageVisitsTracker {
 
   handleStorageChange(changes, areaName) {
       if (areaName === 'sync') {
-          if (changes.categoryTags) {
+          if (changes.categoryTags && changes.categoryTags.newValue) {
               this.categoryTags = changes.categoryTags.newValue;
               this.updateKeywordToCategoryMap();
           }
@@ -172,7 +255,7 @@ class PageVisitsTracker {
               this.resetData();
               this.loadCategoryTags();
               this.trackActiveTab();
-              alert('All data has been cleared.');
+              console.log('All data has been cleared.');
           });
       });
   }
@@ -180,6 +263,14 @@ class PageVisitsTracker {
   clearPageVisits(sendResponse) {
       chrome.storage.local.set({ pageVisits: [] }, () => {
           sendResponse({ success: true });
+      });
+  }
+
+  startTrackingActiveTab() {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs.length > 0) {
+              this.startTracking(tabs[0].id);
+          }
       });
   }
 }

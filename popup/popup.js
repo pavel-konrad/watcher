@@ -15,7 +15,6 @@ class PopupUI {
       this.loadTags();
       this.initEventListeners();
       this.fetchPageVisits();
-      this.trackPageVisits();
   }
 
   addClickEvent(selector, callback) {
@@ -37,6 +36,7 @@ class PopupUI {
           });
       }
   }
+
 
   loadTags() {
       chrome.storage.sync.get('categoryTags', (result) => {
@@ -75,8 +75,6 @@ class PopupUI {
       chrome.runtime.sendMessage({ action: 'getPageVisits' }, (response) => {
           if (response?.pageVisits) {
               this.categorizePageVisits(response.pageVisits);
-          } else {
-              console.error('Error fetching page visits.');
           }
       });
   }
@@ -86,8 +84,9 @@ class PopupUI {
           const categorizedData = { other: [] };
           const totalTimeSpent = { other: 0 };
 
-          pageVisits.forEach(visit => {
+          pageVisits.forEach((visit) => {
               let category = this.categorizePageVisit(visit.url, keywordToCategoryMap);
+              
               if (!category) {
                   category = 'other';
               }
@@ -96,7 +95,8 @@ class PopupUI {
                   totalTimeSpent[category] = 0;
               }
 
-              const existingVisit = categorizedData[category].find(v => v.url === visit.url);
+              const key = visit.pageTitle;
+              const existingVisit = categorizedData[category].find(v => v.pageTitle === key);
               if (existingVisit) {
                   existingVisit.timeSpent += visit.timeSpent;
               } else {
@@ -108,11 +108,13 @@ class PopupUI {
               totalTimeSpent[category] += visit.timeSpent;
           });
 
+
           Object.keys(categorizedData).forEach(category => 
               categorizedData[category].sort((a, b) => b.timeSpent - a.timeSpent)
           );
 
           const categoryPercentages = this.calculateCategoryPercentages(totalTimeSpent, pageVisits);
+          console.log('Final category percentages:', categoryPercentages);
           this.updateUI(categorizedData, categoryPercentages);
       });
   }
@@ -125,9 +127,15 @@ class PopupUI {
   }
 
   categorizePageVisit(url, keywordToCategoryMap) {
-      return Object.entries(keywordToCategoryMap).find(([category, keywords]) =>
-          keywords.some(keyword => url.toLowerCase().includes(keyword.toLowerCase()))
-      )?.[0] || null;
+      const result = Object.entries(keywordToCategoryMap).find(([category, keywords]) => {
+          return keywords.some(keyword => {
+              const urlLower = url.toLowerCase();
+              const keywordLower = keyword.toLowerCase();
+              return urlLower.includes(keywordLower);
+          });
+      });
+      
+      return result?.[0] || null;
   }
 
   trackPageVisits() {
@@ -159,6 +167,8 @@ class PopupUI {
           progressBarDiv.style.width = `${percentage}%`;
           progressBarDiv.innerHTML = `${this.progressBarCategories[selector]}: ${percentage.toFixed(0)}%`;
           progressBarDiv.addEventListener('click', () => this.displayCategorizedData(categoryData, this.progressBarCategories[selector]));
+      } else {
+          console.error(`Progress bar element not found: ${selector}`);
       }
   }
 
@@ -266,16 +276,21 @@ class PopupUI {
 
   clearData() {
       if (confirm('Are you sure you want to clear all data?')) {
-          chrome.storage.sync.clear(() => {
-              this.categoryTags = {};
-              this.updateUI({}, {});
-              alert('All data has been cleared.');
+          chrome.runtime.sendMessage({ action: 'clearData' }, (response) => {
+              if (response?.success) {
+                  this.categoryTags = {};
+                  this.updateUI({}, {});
+                  alert('All data has been cleared.');
+              } else {
+                  console.error('Error clearing data:', response);
+                  alert('Error clearing data. Please try again.');
+              }
           });
       }
   }
 
   openDonateLink() {
-      window.open('https://www.donate-link.com', '_blank');
+      window.open('https://www.paypal.com/donate/?hosted_button_id=3SXLYVB58ADJ2', '_blank');
   }
 }
 
