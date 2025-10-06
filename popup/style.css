@@ -37,9 +37,10 @@ body {
 .logo {
     width: 100px;
     height: 100px;
+    border-radius: 5px;
     background-size: contain;
     background-repeat: no-repeat;
-    background-image: url('../images/logo.png');
+    background-image: url('../images/icon-128.png');
 }
 
 .hero h2 {
@@ -106,18 +107,20 @@ body {
 }
 
 #detailed-data {
-   margin-top: 20px;
-   margin-bottom: 20px;
+
 }
 
 
 .detailed-item {
     min-width: 280px;
+    max-width: 100%;
     background-color: white;
     padding: 20px 10px 20px 10px;
     border-radius: 0px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.3);
     transition: background-color 0.3s ease, filter 0.2s ease-out, width 0.3s ease;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .detailed-item:hover {
@@ -131,6 +134,12 @@ body {
     font-weight: 800;
     text-decoration: none;
     color: #272829;
+    word-wrap: break-word;
+    word-break: break-all;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    display: block;
+    line-height: 1.4;
 }
 
 .detailed-item span {
