@@ -67,8 +67,6 @@ No data is uploaded, shared, or tracked — your browsing history stays yours.
 ## Author
 
 **Pavel Konrád**  
-Frontend Developer & Visual Programming Teacher  
-[https://pavelkonrad.cz](https://pavelkonrad.cz)
 
 ---
 
